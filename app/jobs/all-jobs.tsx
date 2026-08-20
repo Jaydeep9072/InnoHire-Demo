@@ -36,7 +36,7 @@ export function AllJobs() {
       const response = await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "publish", jobId }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "The job could not be published.");
-      setActionMessage({ type: "success", text: payload.message || "Job published successfully." });
+      setActionMessage({ type: "success", text: payload.response_message || payload.repsonse_message || "Job published successfully." });
       load();
     } catch (error) { setActionMessage({ type: "error", text: error instanceof Error ? error.message : "The job could not be published." }); }
     finally { setPublishingId(null); }
@@ -48,7 +48,7 @@ export function AllJobs() {
       const response = await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "close", jobId }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "The job could not be closed.");
-      setActionMessage({ type: "success", text: payload.message || "Job closed successfully." });
+      setActionMessage({ type: "success", text: payload.response_message || payload.repsonse_message || "Job closed successfully." });
       setData((current) => current ? { ...current, jobs: current.jobs.map((job) => job.job_posting_id === jobId ? { ...job, posting_status: "CLOSED" } : job) } : current);
       setCloseTarget(null);
       load();

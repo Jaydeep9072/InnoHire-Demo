@@ -50,11 +50,7 @@ export const publishJobSchema = jobDraftSchema.superRefine((value, context) => {
     const fieldValue = String(value[field] ?? "");
     if ((field === "jobDescription" || field === "responsibilities") ? !hasRichText(fieldValue) : !fieldValue.trim()) context.addIssue({ code: "custom", path: [field], message });
   }
-  if (!value.jobBoards.length) context.addIssue({ code: "custom", path: ["jobBoards"], message: "Select at least one publishing platform" });
-  if (value.jobBoards.includes("LinkedIn")) {
-    if (!value.linkedinCompanyId) context.addIssue({ code: "custom", path: ["linkedinCompanyId"], message: "LinkedIn company ID is required" });
-    if (!value.linkedinLocationId) context.addIssue({ code: "custom", path: ["linkedinLocationId"], message: "LinkedIn location ID is required" });
-  }
+  // Job-board and LinkedIn identifier validation is paused while submissions use ORDS only.
   if (value.notificationEmail && !z.string().email().safeParse(value.notificationEmail).success) {
     context.addIssue({ code: "custom", path: ["notificationEmail"], message: "Enter a valid notification email" });
   }

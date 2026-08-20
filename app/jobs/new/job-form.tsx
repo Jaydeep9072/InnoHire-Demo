@@ -6,6 +6,7 @@ import styles from "./job-form.module.css";
 import { RichTextEditor } from "./rich-text-editor";
 
 const steps = ["Job details", "Description", "Requirements", "Review & publish"];
+const jobBoardSelectionEnabled = false;
 const postingChannels = [
   { name: "LinkedIn", mark: "in" },
   { name: "Indeed", mark: "i" },
@@ -32,7 +33,7 @@ type JobState = {
 const initialJob: JobState = {
   title: "", department: "", jobDescription: "", responsibilities: "", requiredSkills: "",
   minimumExperience: 0, salary: "", currency: "", minSalary: "", maxSalary: "", payFrequency: "", location: "", workplaceType: "ON_SITE", employmentType: "FULL_TIME", seniorityLevel: "",
-  openingsCount: 1, closingDate: "", jobBoards: ["LinkedIn"], linkedinJobTitleId: "", linkedinCompanyId: "", linkedinLocationId: "", notificationEmail: "",
+  openingsCount: 1, closingDate: "", jobBoards: [], linkedinJobTitleId: "", linkedinCompanyId: "", linkedinLocationId: "", notificationEmail: "",
 };
 
 function hasEditorContent(value: string) { return value.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0; }
@@ -51,12 +52,12 @@ export function JobForm() {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadedFile = useRef<File | null>(null);
 
-  const linkedInReady = !job.jobBoards.includes("LinkedIn") || Boolean(job.linkedinCompanyId && job.linkedinLocationId);
+  const publishingReady = !jobBoardSelectionEnabled || (job.jobBoards.length > 0 && (!job.jobBoards.includes("LinkedIn") || Boolean(job.linkedinCompanyId && job.linkedinLocationId)));
   const stepChecks = [
     Boolean(job.title && job.department && job.seniorityLevel && job.location && job.workplaceType && job.employmentType && job.openingsCount > 0),
     Boolean(hasEditorContent(job.jobDescription) && hasEditorContent(job.responsibilities)),
     Boolean(job.requiredSkills),
-    Boolean(job.jobBoards.length > 0 && linkedInReady),
+    publishingReady,
   ];
 
   function update<K extends keyof JobState>(key: K, value: JobState[K]) { setJob((current) => ({ ...current, [key]: value })); setMessage(null); }
@@ -87,9 +88,17 @@ export function JobForm() {
         const firstFieldError = payload.fields ? Object.values(payload.fields).flat().find(Boolean) : null;
         throw new Error(String(firstFieldError || apiErrorMessage(payload, "The job could not be saved.")));
       }
-      setJob((current) => ({ ...current, localJobId: payload.jobId, applyUrl: payload.applyUrl || current.applyUrl }));
-      if (action === "submit") { router.push(`/jobs/${payload.jobId}`); return; }
-      setMessage({ type: "success", text: `Draft #${payload.jobId} saved.` });
+      const savedJobId = Number(payload.job_posting_id ?? payload.jobId);
+      if (!Number.isInteger(savedJobId) || savedJobId <= 0) throw new Error("The job was saved, but its ID was not returned.");
+      let savedApplyUrl: string | undefined;
+      try {
+        const detailResponse = await fetch(`/api/jobs?id=${savedJobId}`);
+        const detailPayload = await detailResponse.json();
+        if (detailResponse.ok && typeof detailPayload.job?.apply_url === "string") savedApplyUrl = detailPayload.job.apply_url;
+      } catch { /* The ORDS mutation succeeded; the detail page can retrieve the URL later. */ }
+      setJob((current) => ({ ...current, localJobId: savedJobId, applyUrl: savedApplyUrl || current.applyUrl }));
+      if (action === "submit") { router.push(`/jobs/${savedJobId}`); return; }
+      setMessage({ type: "success", text: String(payload.response_message || payload.repsonse_message || `Draft #${savedJobId} saved.`) });
     } catch (error) { setMessage({ type: "error", text: error instanceof Error ? error.message : "The job could not be saved." }); }
     finally { setBusy(null); }
   }
@@ -144,13 +153,13 @@ export function JobForm() {
           </>}
 
           {activeStep === 3 && <>
-            <SectionHeading number="04" title="Review and publish" subtitle="Confirm the LinkedIn identifiers and publish this job." />
+            <SectionHeading number="04" title="Review and publish" subtitle="Review the job details before submitting them to ORDS." />
             <div className={styles.reviewGrid}>
               <article className={styles.reviewCard}><span>Role</span><strong>{job.title || "Job title not added"}</strong><p>{[job.department, job.location, job.workplaceType.replace("_", " ")].filter(Boolean).join(" · ") || "Role details are incomplete"}</p></article>
               <article className={styles.reviewCard}><span>Requirements</span><strong>{job.minimumExperience} years minimum</strong><p>{job.requiredSkills ? `${job.requiredSkills.split(/[,\n]/).filter(Boolean).length} required skills` : "Required skills not added"}</p></article>
               <article className={styles.reviewCard}><span>Compensation</span><strong>{job.minSalary || job.maxSalary ? `${job.minSalary || "—"} – ${job.maxSalary || "—"} ${job.currency}` : "Not added"}</strong><p>{job.payFrequency ? job.payFrequency.toLowerCase() : "Pay frequency not added"}</p></article>
             </div>
-            <div className={styles.sectionDivider} />
+            {jobBoardSelectionEnabled && <><div className={styles.sectionDivider} />
             <div className={styles.channelHeading}><h2>Choose where to publish</h2></div>
             <div className={styles.channelGrid} role="group" aria-label="Job posting channels">
               {postingChannels.map((channel) => { const selected = job.jobBoards.includes(channel.name); return <button key={channel.name} type="button" aria-pressed={selected} onClick={() => toggleChannel(channel.name)} className={selected ? styles.channelSelected : styles.channelOption}><span>{channel.mark}</span><strong>{channel.name}</strong></button>; })}
@@ -165,7 +174,7 @@ export function JobForm() {
                   <Field label="External application page"><input value={job.applyUrl || "Generated automatically when saved"} readOnly aria-readonly="true" /></Field>
                 </div> : <div className={styles.noPlatformFields}>No additional fields are required for {channel}.</div>}
               </section>)}
-            </div></>}
+            </div></>}</>}
           </>}
 
           <div className={styles.formFooter}><button className={styles.secondaryButton} type="button" onClick={() => save("draft")} disabled={busy !== null}>{busy === "draft" ? "Saving…" : "Save draft"}</button><div className={styles.stepActions}>{activeStep > 0 && <button className={styles.secondaryButton} type="button" onClick={() => setActiveStep(activeStep - 1)}>Back</button>}{activeStep < steps.length - 1 ? <button className={styles.primaryButton} type="button" onClick={() => setActiveStep(activeStep + 1)}>Continue <span>→</span></button> : <button type="button" onClick={() => save("submit")} disabled={busy !== null} className={styles.publishButton}>{busy === "submit" ? "Submitting…" : "Submit job"}</button>}</div></div>

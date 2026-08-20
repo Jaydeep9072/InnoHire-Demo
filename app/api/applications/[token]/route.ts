@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     const status = String(result.response_status ?? result.repsonse_status ?? "SUCCESS").toUpperCase();
     if (status !== "SUCCESS") throw new OrdsError(String(result.response_message ?? result.repsonse_message ?? "The application could not be saved."), 502, result);
-    return NextResponse.json({ success: true, applicationId: result.job_candidate_id ?? application.externalApplicationId }, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof ZodError) return NextResponse.json({ error: "Complete all required fields and attach a valid PDF résumé." }, { status: 400 });
     if (error instanceof OrdsError) {
