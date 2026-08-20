@@ -5,7 +5,11 @@ import { CandidateApplicationForm } from "./candidate-application-form";
 import styles from "./application.module.css";
 import { sanitizeRichText } from "@/lib/rich-text";
 
-export const metadata: Metadata = { title: "Apply for a role", description: "Submit an application to InnoHire." };
+export const metadata: Metadata = {
+  title: "Apply for a role",
+  description: "Submit an application to InnoHire.",
+  robots: { index: false, follow: false },
+};
 export const dynamic = "force-dynamic";
 
 export default async function ApplicationPage({ params }: { params: Promise<{ token: string }> }) {

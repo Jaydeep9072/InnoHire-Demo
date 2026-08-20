@@ -37,6 +37,9 @@ const initialJob: JobState = {
 
 function hasEditorContent(value: string) { return value.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0; }
 function formatMoneyInput(value: string) { const digits = value.replace(/\D/g, ""); return digits ? new Intl.NumberFormat("en-US").format(Number(digits)) : ""; }
+function apiErrorMessage(payload: { error?: unknown }, fallback: string) {
+  return typeof payload.error === "string" && payload.error.trim() ? payload.error.trim() : fallback;
+}
 
 export function JobForm() {
   const router = useRouter();
@@ -82,7 +85,7 @@ export function JobForm() {
       const payload = await response.json();
       if (!response.ok) {
         const firstFieldError = payload.fields ? Object.values(payload.fields).flat().find(Boolean) : null;
-        throw new Error(String(firstFieldError || payload.error || "The job could not be saved."));
+        throw new Error(String(firstFieldError || apiErrorMessage(payload, "The job could not be saved.")));
       }
       setJob((current) => ({ ...current, localJobId: payload.jobId, applyUrl: payload.applyUrl || current.applyUrl }));
       if (action === "submit") { router.push(`/jobs/${payload.jobId}`); return; }
@@ -112,6 +115,10 @@ export function JobForm() {
               <Field label="Employment type *"><select value={job.employmentType} onChange={(event) => update("employmentType", event.target.value as JobState["employmentType"])}><option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="CONTRACT">Contract</option><option value="TEMPORARY">Temporary</option><option value="INTERNSHIP">Internship</option><option value="OTHER">Other</option></select></Field>
               <Field label="Number of openings *"><input value={job.openingsCount} onChange={(event) => update("openingsCount", Number(event.target.value))} type="number" min="1" /></Field>
               <Field label="Application closing date"><input value={job.closingDate} onChange={(event) => update("closingDate", event.target.value)} type="date" /></Field>
+            </div>
+            <div className={styles.sectionDivider} />
+            <div className={styles.editorHeading}><div><h2>Compensation</h2><p>Add the salary range shown to candidates.</p></div></div>
+            <div className={styles.formGrid}>
               <Field label="Currency"><select value={job.currency} onChange={(event) => update("currency", event.target.value)}><option value="">Select currency</option>{currencies.map(([code, name]) => <option value={code} key={code}>{code} — {name}</option>)}</select></Field>
               <Field label="Pay frequency"><select value={job.payFrequency} onChange={(event) => update("payFrequency", event.target.value as JobState["payFrequency"])}><option value="">Select frequency</option><option value="YEARLY">Yearly</option><option value="MONTHLY">Monthly</option><option value="HOURLY">Hourly</option></select></Field>
               <Field label="Minimum salary"><input inputMode="numeric" value={job.minSalary} onChange={(event) => update("minSalary", formatMoneyInput(event.target.value))} placeholder="e.g. 100,000" /></Field>
@@ -141,6 +148,7 @@ export function JobForm() {
             <div className={styles.reviewGrid}>
               <article className={styles.reviewCard}><span>Role</span><strong>{job.title || "Job title not added"}</strong><p>{[job.department, job.location, job.workplaceType.replace("_", " ")].filter(Boolean).join(" · ") || "Role details are incomplete"}</p></article>
               <article className={styles.reviewCard}><span>Requirements</span><strong>{job.minimumExperience} years minimum</strong><p>{job.requiredSkills ? `${job.requiredSkills.split(/[,\n]/).filter(Boolean).length} required skills` : "Required skills not added"}</p></article>
+              <article className={styles.reviewCard}><span>Compensation</span><strong>{job.minSalary || job.maxSalary ? `${job.minSalary || "—"} – ${job.maxSalary || "—"} ${job.currency}` : "Not added"}</strong><p>{job.payFrequency ? job.payFrequency.toLowerCase() : "Pay frequency not added"}</p></article>
             </div>
             <div className={styles.sectionDivider} />
             <div className={styles.channelHeading}><h2>Choose where to publish</h2></div>

@@ -28,6 +28,8 @@ export function findJobByApplicationToken(jobs: OrdsJob[], token: string) {
   if (!safeToken) return null;
   return jobs.find((job) => {
     if (!job.apply_url) return false;
+    const status = (job.posting_status || "").toUpperCase();
+    if (status !== "DRAFT" && status !== "PUBLISHED") return false;
     try {
       const segments = new URL(job.apply_url).pathname.split("/").filter(Boolean);
       return segments.at(-1) === safeToken && segments.at(-2) === "apply";

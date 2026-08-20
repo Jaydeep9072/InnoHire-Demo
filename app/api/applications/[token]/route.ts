@@ -52,8 +52,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, applicationId: result.job_candidate_id ?? application.externalApplicationId }, { status: 201 });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof ZodError) return NextResponse.json({ error: "Complete all required fields and attach a valid PDF résumé." }, { status: 400 });
-    if (error instanceof OrdsError) return NextResponse.json({ error: error.message }, { status: error.status });
-    console.error("Candidate application failed", error instanceof Error ? error.message : "Unknown error");
+    if (error instanceof OrdsError) {
+      console.error("ORDS candidate application failed", { message: error.message, status: error.status, details: error.details });
+      return NextResponse.json({ error: "Your application could not be submitted right now. Please try again shortly." }, { status: error.status });
+    }
+    console.error("Candidate application failed", error);
     return NextResponse.json({ error: "Your application could not be submitted. Please try again." }, { status: 500 });
   }
 }

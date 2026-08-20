@@ -83,7 +83,7 @@
 .securityNote p { margin: 4px 0 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; }
 .messageSuccess, .messageError { display: flex; align-items: center; gap: 9px; margin: -8px 0 16px; padding: 11px 13px; border: 1px solid; border-radius: var(--radius-sm); font-size: 12px; }
 .messageSuccess { border-color: #b8dfd6; background: #eff9f6; color: #0d6952; }
-.messageError { border-color: #efc3be; background: #fff4f2; color: var(--color-error); }
+.messageError { border-color: #efc3be; background: #fff4f2; color: var(--color-error); white-space: pre-wrap; overflow-wrap: anywhere; }
 .messageSuccess span, .messageError span { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: currentColor; color: #fff; font-size: 10px; font-weight: 800; }
 .notice { display: flex; gap: 11px; margin-bottom: 20px; padding: 14px; border: 1px solid #cce6e0; border-radius: 8px; background: #f2faf8; }
 .notice > span { color: var(--color-interactive); font-size: 20px; }.notice strong { font-size: 12px; }.notice p { margin: 3px 0 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; }

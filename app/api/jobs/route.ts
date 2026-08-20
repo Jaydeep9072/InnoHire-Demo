@@ -3,15 +3,41 @@ import { ZodError } from "zod";
 import { createOrdsJob, listOrdsCandidates, listOrdsJobs, OrdsError, ordsJobToInput } from "@/lib/ords/client";
 import { jobDraftSchema, publishJobSchema } from "@/lib/validation/job";
 import { createApplicationUrl } from "@/lib/applications/urls";
-import { closeLinkedInJob, createLinkedInJob, publishLinkedInJob, UnipileError } from "@/lib/unipile/client";
+import { closeLinkedInJob, createLinkedInJob, publishLinkedInJob, UnipileError, updateLinkedInJobApplicationUrl } from "@/lib/unipile/client";
 
 export const runtime = "nodejs";
 
+function providerDetail(details: unknown) {
+  if (!details || typeof details !== "object") return "";
+  const record = details as Record<string, unknown>;
+  const detail = [record.detail, record.message, record.title].find((value) => typeof value === "string" && value.trim().length > 0);
+  if (typeof detail !== "string" || detail.length > 240 || ["{", "}", "[", "]", "<", ">"].some((character) => detail.includes(character))) return "";
+  return detail.replaceAll("_", " ").trim();
+}
+
+function linkedInClientError(error: UnipileError) {
+  const detail = providerDetail(error.details);
+  if (error.message.includes("credentials are not configured")) return "LinkedIn publishing has not been configured yet. Please contact your administrator.";
+  if (error.status === 401) return "The LinkedIn connection has expired. Please reconnect the LinkedIn account and try again.";
+  if (error.status === 403) return "The connected LinkedIn account does not have permission to perform this action.";
+  if (error.status === 404) return "LinkedIn could not find the requested job or connected account.";
+  if (error.status === 422) return detail ? `LinkedIn could not accept this job: ${detail}` : "LinkedIn could not accept some of the job information. Please review the LinkedIn fields and try again.";
+  if (error.status === 429) return "LinkedIn is receiving too many requests. Please wait a moment and try again.";
+  if (error.status >= 500) return "LinkedIn is temporarily unavailable. Please try again shortly.";
+  return detail ? `LinkedIn could not complete this action: ${detail}` : "LinkedIn could not complete this action. Please try again.";
+}
+
 function errorResponse(error: unknown) {
   if (error instanceof ZodError) return NextResponse.json({ error: "Please correct the highlighted fields.", fields: error.flatten().fieldErrors }, { status: 400 });
-  if (error instanceof OrdsError) return NextResponse.json({ error: error.message, details: error.details }, { status: error.status });
-  if (error instanceof UnipileError) return NextResponse.json({ error: error.message, details: error.details }, { status: error.status });
-  console.error("Job operation failed", error instanceof Error ? error.message : "Unknown error");
+  if (error instanceof OrdsError) {
+    console.error("ORDS job operation failed", { message: error.message, status: error.status, details: error.details });
+    return NextResponse.json({ error: "We could not save or retrieve the job information right now. Please try again." }, { status: error.status });
+  }
+  if (error instanceof UnipileError) {
+    console.error("Unipile job operation failed", { message: error.message, status: error.status, details: error.details });
+    return NextResponse.json({ error: linkedInClientError(error) }, { status: error.status });
+  }
+  console.error("Job operation failed", error);
   return NextResponse.json({ error: "The job could not be saved. Please try again." }, { status: 500 });
 }
 
@@ -32,7 +58,24 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
-    const action = payload.action === "submit" ? "submit" : payload.action === "publish" ? "publish" : payload.action === "close" ? "close" : "draft";
+    const action = payload.action === "submit" ? "submit" : payload.action === "publish" ? "publish" : payload.action === "close" ? "close" : payload.action === "application_page" ? "application_page" : "draft";
+    if (action === "application_page") {
+      const jobId = Number(payload.jobId);
+      if (!Number.isInteger(jobId) || jobId <= 0) return NextResponse.json({ error: "Enter a valid job ID." }, { status: 400 });
+      const existing = (await listOrdsJobs(jobId))[0];
+      if (!existing) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+      const status = (existing.posting_status || "").toUpperCase();
+      if (status !== "DRAFT" && status !== "PUBLISHED") return NextResponse.json({ error: "Application pages can only be created for draft or published jobs." }, { status: 409 });
+      if (existing.apply_url) return NextResponse.json({ jobId, applyUrl: existing.apply_url, message: "The candidate application page is ready." });
+
+      const applyUrl = createApplicationUrl(request.nextUrl.origin);
+      if (existing.external_job_id) await updateLinkedInJobApplicationUrl(existing.external_job_id, applyUrl);
+      const update = await createOrdsJob({ ...ordsJobToInput(existing), applyUrl }, { externalJobId: existing.external_job_id, postingStatus: status, publishedAt: existing.published_at });
+      if (update.response_status && update.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(update.response_message || "The candidate application page could not be saved.", 502, update);
+      const savedJob = (await listOrdsJobs(jobId))[0];
+      if (savedJob?.apply_url !== applyUrl) throw new OrdsError("ORDS did not persist the generated apply_url.", 502, { job_posting_id: jobId, expected_apply_url: applyUrl, saved_apply_url: savedJob?.apply_url ?? null });
+      return NextResponse.json({ jobId, applyUrl, message: "Candidate application page created successfully." });
+    }
     if (action === "close") {
       const jobId = Number(payload.jobId);
       if (!Number.isInteger(jobId) || jobId <= 0) return NextResponse.json({ error: "Enter a valid job ID." }, { status: 400 });
@@ -74,6 +117,12 @@ export async function POST(request: NextRequest) {
     if (generatedApplyUrl && Number.isFinite(jobId) && jobId > 0) {
       const applyUrlUpdate = await createOrdsJob({ ...job, localJobId: jobId }, { externalJobId, postingStatus: "DRAFT" });
       if (applyUrlUpdate.response_status && applyUrlUpdate.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(applyUrlUpdate.response_message || "The job was created, but ORDS did not save its application URL.", 502, applyUrlUpdate);
+    }
+    if (Number.isFinite(jobId) && jobId > 0) {
+      const savedJob = (await listOrdsJobs(jobId))[0];
+      if (!savedJob || savedJob.apply_url !== job.applyUrl) {
+        throw new OrdsError("The job was created, but ORDS did not persist the generated apply_url.", 502, { job_posting_id: jobId, expected_apply_url: job.applyUrl, saved_apply_url: savedJob?.apply_url ?? null });
+      }
     }
     return NextResponse.json({
       jobId: Number.isFinite(jobId) ? jobId : result.job_posting_id,

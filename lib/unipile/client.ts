@@ -21,24 +21,41 @@ function escapeHtml(value: string) {
 function description(input: JobInput) {
   const richBlock = (heading: string, value: string) => value.trim() ? `<p><strong>${heading}</strong></p>${sanitizeRichText(value)}` : "";
   const textBlock = (heading: string, value: string) => value.trim() ? `<p><strong>${heading}</strong></p><p>${escapeHtml(value).replace(/\n/g, "<br>")}</p>` : "";
-  return [richBlock("About the role", input.jobDescription), richBlock("Responsibilities", input.responsibilities), textBlock("Required skills", input.requiredSkills), textBlock("Preferred skills", input.preferredSkills)].join("");
+  const minimum = input.minSalary == null ? "" : new Intl.NumberFormat("en-US").format(input.minSalary);
+  const maximum = input.maxSalary == null ? "" : new Intl.NumberFormat("en-US").format(input.maxSalary);
+  const salaryRange = minimum && maximum ? `${minimum} - ${maximum}` : minimum || maximum;
+  const compensation = [salaryRange, input.currency, input.payFrequency ? `per ${input.payFrequency.toLowerCase().replace("ly", "")}` : ""].filter(Boolean).join(" ");
+  return [richBlock("About the role", input.jobDescription), richBlock("Responsibilities", input.responsibilities), textBlock("Required skills", input.requiredSkills), textBlock("Preferred skills", input.preferredSkills), textBlock("Compensation", compensation)].join("");
 }
 
-async function request(path: string, body: unknown) {
+function providerErrorMessage(payload: unknown) {
+  if (typeof payload === "string") return payload.trim();
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const messages = ["message", "detail", "title", "error", "reason", "code", "type"]
+    .map((key) => record[key])
+    .filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
+  return [...new Set(messages)].join(" — ");
+}
+
+async function request(path: string, body: unknown, method: "POST" | "PATCH" = "POST") {
   const { baseUrl, apiKey } = configuration();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(`${baseUrl}${path}`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json", "x-api-key": apiKey }, body: JSON.stringify(body), signal: controller.signal });
+    const response = await fetch(`${baseUrl}${path}`, { method, headers: { "content-type": "application/json", accept: "application/json", "x-api-key": apiKey }, body: JSON.stringify(body), signal: controller.signal });
     const raw = await response.text();
     let parsed: unknown = raw;
     try { parsed = raw ? JSON.parse(raw) : null; } catch { /* Retain non-JSON error details. */ }
-    if (!response.ok) throw new UnipileError(`Unipile request failed with status ${response.status}.`, response.status, parsed);
+    if (!response.ok) {
+      const providerMessage = providerErrorMessage(parsed);
+      throw new UnipileError(`Unipile request failed (${response.status}${response.statusText ? ` ${response.statusText}` : ""})${providerMessage ? `: ${providerMessage}` : "."}`, response.status, parsed);
+    }
     return parsed;
   } catch (error) {
     if (error instanceof UnipileError) throw error;
     if (error instanceof Error && error.name === "AbortError") throw new UnipileError("Unipile request timed out.", 504);
-    throw new UnipileError("Unable to reach Unipile.", 502);
+    throw new UnipileError(`Unable to reach Unipile${error instanceof Error && error.message ? `: ${error.message}` : "."}`, 502);
   } finally { clearTimeout(timer); }
 }
 
@@ -72,6 +89,14 @@ export async function createLinkedInJob(input: JobInput) {
 export async function publishLinkedInJob(jobId: string) {
   const { accountId } = configuration();
   return request(`/api/v1/linkedin/jobs/${encodeURIComponent(jobId)}/publish`, { account_id: accountId, mode: "FREE" });
+}
+
+export async function updateLinkedInJobApplicationUrl(jobId: string, applyUrl: string) {
+  const { accountId } = configuration();
+  return request(`/api/v1/linkedin/jobs/${encodeURIComponent(jobId)}`, {
+    account_id: accountId,
+    apply_method: { type: "external", url: applyUrl },
+  }, "PATCH");
 }
 
 export async function closeLinkedInJob(jobId: string) {
