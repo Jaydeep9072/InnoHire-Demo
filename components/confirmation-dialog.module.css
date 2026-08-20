@@ -1,0 +1,11 @@
+.backdrop { position: fixed; z-index: 200; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(8,20,19,.58); }
+.dialog { width: min(440px,100%); padding: 28px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #fff; text-align: center; box-shadow: 0 22px 70px rgba(0,0,0,.2); }
+.icon { width: 48px; height: 48px; display: grid; place-items: center; margin: 0 auto 15px; border-radius: 50%; background: #fff0ee; color: var(--color-error); font-size: 20px; font-weight: 800; }
+.dialog h2 { margin: 0 0 8px; font-size: 20px; }
+.dialog p { margin: 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.65; }
+.dialog footer { display: flex; justify-content: center; gap: 9px; margin-top: 23px; }
+.dialog button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 650; cursor: pointer; }
+.cancelButton { border: 1px solid var(--color-border); background: #fff; color: var(--color-text); }
+.confirmButton { border: 1px solid var(--color-error); background: var(--color-error); color: #fff; }
+.dialog button:disabled { opacity: .55; cursor: wait; }
+@media (max-width: 480px) { .dialog { padding: 23px 18px; }.dialog footer { flex-direction: column-reverse; }.dialog button { width: 100%; } }

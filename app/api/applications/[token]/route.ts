@@ -1,0 +1,59 @@
+import { Buffer } from "node:buffer";
+import { NextRequest, NextResponse } from "next/server";
+import { z, ZodError } from "zod";
+import { findJobByApplicationToken } from "@/lib/applications/urls";
+import { createOrdsCandidate, listOrdsJobs, OrdsError } from "@/lib/ords/client";
+
+export const runtime = "nodejs";
+const maximumResumeBytes = 3 * 1024 * 1024;
+
+const applicationSchema = z.object({
+  externalApplicationId: z.string().uuid(),
+  fullName: z.string().trim().min(2).max(500),
+  emailAddress: z.string().trim().email().max(500),
+  phoneNumber: z.string().trim().min(5).max(100),
+  candidateLocation: z.string().trim().min(2).max(500),
+  linkedinProfileUrl: z.union([z.string().trim().url().max(2000), z.literal("")]).optional(),
+  currentCompany: z.string().trim().max(500).optional(), currentPosition: z.string().trim().max(500).optional(),
+  yearsOfExperience: z.number().min(0).max(80).optional(),
+  resumeFileName: z.string().trim().min(1).max(500), resumeMimeType: z.literal("application/pdf"),
+  resumeBase64: z.string().min(8).max(4_200_000), consent: z.literal(true),
+});
+
+export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  try {
+    const { token } = await params;
+    const job = findJobByApplicationToken(await listOrdsJobs(), token);
+    if (!job) return NextResponse.json({ error: "This application link is not available." }, { status: 404 });
+    const application = applicationSchema.parse(await request.json());
+    const resume = Buffer.from(application.resumeBase64, "base64");
+    if (!resume.length || resume.length > maximumResumeBytes || resume.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      return NextResponse.json({ error: "Upload a valid PDF résumé no larger than 3 MB." }, { status: 400 });
+    }
+    const result = await createOrdsCandidate({
+      job_posting_id: job.job_posting_id,
+      external_application_id: application.externalApplicationId,
+      external_candidate_id: null,
+      full_name: application.fullName,
+      email_address: application.emailAddress,
+      phone_number: application.phoneNumber,
+      headline: application.currentPosition || null,
+      candidate_location: application.candidateLocation,
+      linkedin_profile_url: application.linkedinProfileUrl || null,
+      resume_url: null,
+      resume_text: application.resumeBase64,
+      current_company: application.currentCompany || null,
+      current_position: application.currentPosition || null,
+      years_of_experience: application.yearsOfExperience ?? null,
+      applied_at: new Date().toISOString(),
+    });
+    const status = String(result.response_status ?? result.repsonse_status ?? "SUCCESS").toUpperCase();
+    if (status !== "SUCCESS") throw new OrdsError(String(result.response_message ?? result.repsonse_message ?? "The application could not be saved."), 502, result);
+    return NextResponse.json({ success: true, applicationId: result.job_candidate_id ?? application.externalApplicationId }, { status: 201 });
+  } catch (error) {
+    if (error instanceof SyntaxError || error instanceof ZodError) return NextResponse.json({ error: "Complete all required fields and attach a valid PDF résumé." }, { status: 400 });
+    if (error instanceof OrdsError) return NextResponse.json({ error: error.message }, { status: error.status });
+    console.error("Candidate application failed", error instanceof Error ? error.message : "Unknown error");
+    return NextResponse.json({ error: "Your application could not be submitted. Please try again." }, { status: 500 });
+  }
+}
