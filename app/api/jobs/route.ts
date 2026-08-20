@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       const update = await createOrdsJob({ ...ordsJobToInput(existing), applyUrl }, { externalJobId: existing.external_job_id, postingStatus: status, publishedAt: existing.published_at });
       if (update.response_status && update.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(update.response_message || "The candidate application page could not be saved.", 502, update);
       const savedJob = (await listOrdsJobs(jobId))[0];
-      if (savedJob?.apply_url !== applyUrl) console.warn("ORDS did not persist apply_url; the job-based application URL fallback remains active.", { job_posting_id: jobId, expected_apply_url: applyUrl });
+      if (savedJob?.apply_url !== applyUrl) console.warn("ORDS did not persist apply_url; the job-based application URL fallback remains active.", { job_posting_id: jobId, apply_url: applyUrl });
 
       // Unipile LinkedIn synchronization is intentionally paused. ORDS owns the application URL for now.
       return NextResponse.json(update);
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       if (applyUrlUpdate.response_status && applyUrlUpdate.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(applyUrlUpdate.response_message || "The job was created, but ORDS did not save its application URL.", 502, applyUrlUpdate);
     }
     const savedJob = (await listOrdsJobs(jobId))[0];
-    if (!savedJob || savedJob.apply_url !== applyUrl) console.warn("ORDS did not persist apply_url; the job-based application URL fallback remains active.", { job_posting_id: jobId, expected_apply_url: applyUrl });
+    if (!savedJob || savedJob.apply_url !== applyUrl) console.warn("ORDS did not persist apply_url; the job-based application URL fallback remains active.", { job_posting_id: jobId, apply_url: applyUrl });
 
     // Unipile LinkedIn draft creation is intentionally paused. The job and apply URL are stored in ORDS only.
     return NextResponse.json(result);
