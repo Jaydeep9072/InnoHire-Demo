@@ -1,14 +1,14 @@
 import { Buffer } from "node:buffer";
 import { NextRequest, NextResponse } from "next/server";
-import pdfParse from "pdf-parse";
 import { z, ZodError } from "zod";
-import { findJobByApplicationToken } from "@/lib/applications/urls";
+import { findJobByApplicationToken, jobIdFromApplicationToken } from "@/lib/applications/urls";
 import { matchCandidateToJob, type CandidateMatch } from "@/lib/ai/candidate-matching-agent";
 import { scoreCandidate } from "@/lib/candidate-matching/score";
 import { createOrdsCandidate, listOrdsJobs, OrdsError } from "@/lib/ords/client";
 
 export const runtime = "nodejs";
 const maximumResumeBytes = 3 * 1024 * 1024;
+const oracleTimestamp = () => new Date().toISOString().slice(0, 19);
 
 const applicationSchema = z.object({
   externalApplicationId: z.string().uuid(),
@@ -26,13 +26,15 @@ const applicationSchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params;
-    const job = findJobByApplicationToken(await listOrdsJobs(), token);
+    const jobId = jobIdFromApplicationToken(token);
+    const job = findJobByApplicationToken(await listOrdsJobs(jobId || undefined), token);
     if (!job) return NextResponse.json({ error: "This application link is not available." }, { status: 404 });
     const application = applicationSchema.parse(await request.json());
     const resume = Buffer.from(application.resumeBase64, "base64");
     if (!resume.length || resume.length > maximumResumeBytes || resume.subarray(0, 5).toString("ascii") !== "%PDF-") {
       return NextResponse.json({ error: "Upload a valid PDF résumé no larger than 3 MB." }, { status: 400 });
     }
+    const appliedAt = oracleTimestamp();
     let match: CandidateMatch;
     try {
       match = await matchCandidateToJob({
@@ -46,16 +48,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
     } catch (error) {
       console.error("Gemini candidate matching failed; using evidence-only fallback scoring.", error);
-      let resumeText = "";
-      try { resumeText = (await pdfParse(resume)).text; }
-      catch (parseError) { console.error("Resume text extraction failed during fallback scoring.", parseError); }
       const fallback = scoreCandidate({
         title: job.title || "this role",
         requiredSkills: job.required_skills || "",
         preferredSkills: "",
         minimumExperience: job.minimum_experience || 0,
       }, {
-        resumeText,
+        resumeText: "",
         headline: application.currentPosition || "",
         currentPosition: application.currentPosition || "",
         yearsOfExperience: application.yearsOfExperience || 0,
@@ -72,28 +71,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const result = await createOrdsCandidate({
       job_posting_id: job.job_posting_id,
-      external_application_id: application.externalApplicationId,
-      external_candidate_id: null,
+      external_application_id: `APP-WEB-${application.externalApplicationId}`,
+      external_candidate_id: `CAND-WEB-${application.externalApplicationId}`,
       full_name: application.fullName,
       email_address: application.emailAddress,
       phone_number: application.phoneNumber,
-      headline: application.currentPosition || null,
+      headline: application.currentPosition || "",
       candidate_location: application.candidateLocation,
-      linkedin_profile_url: application.linkedinProfileUrl || null,
-      resume_url: null,
+      linkedin_profile_url: application.linkedinProfileUrl || "",
+      resume_url: "",
       resume_text: application.resumeBase64,
-      current_company: application.currentCompany || null,
-      current_position: application.currentPosition || null,
-      years_of_experience: application.yearsOfExperience ?? null,
+      current_company: application.currentCompany || "",
+      current_position: application.currentPosition || "",
+      years_of_experience: application.yearsOfExperience ?? "",
       application_status: "APPLIED",
       match_score: match.matchScore,
-      matching_skills: match.matchingSkills.join(", ") || null,
-      missing_skills: match.missingSkills.join(", ") || null,
-      relevant_experience: match.relevantExperience || null,
-      match_strengths: match.strengths.join("\n") || null,
-      match_concerns: match.concerns.join("\n") || null,
-      match_summary: match.summary,
-      applied_at: new Date().toISOString(),
+      matching_skills: match.matchingSkills.join(", ") || "",
+      missing_skills: match.missingSkills.join(", ") || "",
+      relevant_experience: match.relevantExperience || "",
+      match_strengths: match.strengths.join("\n") || "",
+      match_concerns: match.concerns.join("\n") || "",
+      match_summary: match.summary || "",
+      applied_at: appliedAt,
+      scored_at: oracleTimestamp(),
     });
     const status = String(result.response_status ?? result.repsonse_status ?? "SUCCESS").toUpperCase();
     if (status !== "SUCCESS") throw new OrdsError(String(result.response_message ?? result.repsonse_message ?? "The application could not be saved."), 502, result);

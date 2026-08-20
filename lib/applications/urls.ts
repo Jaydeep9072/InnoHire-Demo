@@ -28,10 +28,16 @@ export function applicationToken(value: string) {
   return /^[A-Za-z0-9_-]{20,128}$/.test(token) ? token : null;
 }
 
+export function jobIdFromApplicationToken(token: string) {
+  const match = /^job-(\d+)$/.exec(token.trim());
+  if (!match) return null;
+  const jobId = Number(match[1]);
+  return Number.isInteger(jobId) && jobId > 0 ? jobId : null;
+}
+
 export function findJobByApplicationToken(jobs: OrdsJob[], token: string) {
-  const jobToken = /^job-(\d+)$/.exec(token.trim());
-  if (jobToken) {
-    const jobId = Number(jobToken[1]);
+  const jobId = jobIdFromApplicationToken(token);
+  if (jobId) {
     return jobs.find((job) => {
       const status = (job.posting_status || "").toUpperCase();
       return job.job_posting_id === jobId && (status === "DRAFT" || status === "PUBLISHED");

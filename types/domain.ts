@@ -32,6 +32,7 @@ export type Candidate = {
   job_candidate_id: number;
   job_posting_id: number;
   external_application_id: string | null;
+  external_candidate_id: string | null;
   full_name: string | null;
   email_address: string | null;
   phone_number: string | null;
@@ -51,6 +52,7 @@ export type Candidate = {
   match_concerns: string | null;
   match_summary: string | null;
   applied_at: string | null;
+  scored_at: string | null;
   job_title: string | null;
 };
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { listOrdsJobs } from "@/lib/ords/client";
-import { findJobByApplicationToken } from "@/lib/applications/urls";
+import { findJobByApplicationToken, jobIdFromApplicationToken } from "@/lib/applications/urls";
 import { CandidateApplicationForm } from "./candidate-application-form";
 import styles from "./application.module.css";
 import { sanitizeRichText } from "@/lib/rich-text";
@@ -15,7 +15,12 @@ export const dynamic = "force-dynamic";
 export default async function ApplicationPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   let job = null;
-  try { job = findJobByApplicationToken(await listOrdsJobs(), token); } catch { /* Render a safe unavailable state. */ }
+  try {
+    const jobId = jobIdFromApplicationToken(token);
+    job = findJobByApplicationToken(await listOrdsJobs(jobId || undefined), token);
+  } catch (error) {
+    console.error("Candidate application job lookup failed", { token, error });
+  }
 
   if (!job) return <main className={styles.publicPage}><section className={styles.unavailable}><Brand /><span>Application unavailable</span><h1>This application link is not available.</h1><p>Check the URL or contact the hiring team for a new link.</p></section></main>;
 

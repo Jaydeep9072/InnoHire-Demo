@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z, ZodError } from "zod";
-import { createOrdsCandidate, listOrdsCandidates, listOrdsJobOptions, OrdsError } from "@/lib/ords/client";
+import { createOrdsCandidate, getOrdsCandidateResume, listOrdsCandidates, listOrdsJobOptions, OrdsError } from "@/lib/ords/client";
 
 export const runtime = "nodejs";
+const ordsTimestamp = (value: string | null) => value ? value.slice(0, 19) : "";
 
 const candidateSchema = z.object({
   jobPostingId: z.number().int().positive(), externalApplicationId: z.string().trim().min(1).max(255),
@@ -64,7 +65,16 @@ export async function POST(request: NextRequest) {
         current_company: candidate.currentCompany || null,
         current_position: candidate.currentPosition || null,
         years_of_experience: candidate.yearsOfExperience ?? null,
+        application_status: "APPLIED",
+        match_score: null,
+        matching_skills: null,
+        missing_skills: null,
+        relevant_experience: null,
+        match_strengths: null,
+        match_concerns: null,
+        match_summary: null,
         applied_at: candidate.appliedAt || null,
+        scored_at: null,
       };
     })();
     return NextResponse.json(await createOrdsCandidate(payload));
@@ -76,14 +86,37 @@ export async function PATCH(request: NextRequest) {
     const payload = z.object({ candidateId: z.number().int().positive(), status: z.enum(["SHORTLISTED", "REJECTED"]) }).parse(await request.json());
     const candidate = (await listOrdsCandidates()).find((item) => item.job_candidate_id === payload.candidateId);
     if (!candidate) return NextResponse.json({ error: "Candidate not found." }, { status: 404 });
+    const resumeText = await getOrdsCandidateResume(candidate.job_candidate_id);
     const result = await createOrdsCandidate({
       job_candidate_id: candidate.job_candidate_id,
       job_posting_id: candidate.job_posting_id,
-      external_application_id: candidate.external_application_id,
+      external_application_id: candidate.external_application_id || "",
+      external_candidate_id: candidate.external_candidate_id || "",
+      full_name: candidate.full_name || "",
+      email_address: candidate.email_address || "",
+      phone_number: candidate.phone_number || "",
+      headline: candidate.headline || "",
+      candidate_location: candidate.candidate_location || "",
+      linkedin_profile_url: candidate.linkedin_profile_url || "",
+      resume_url: candidate.resume_url || "",
+      resume_text: resumeText || "",
+      current_company: candidate.current_company || "",
+      current_position: candidate.current_position || "",
+      years_of_experience: candidate.years_of_experience ?? "",
       application_status: payload.status,
+      match_score: candidate.match_score ?? "",
+      matching_skills: candidate.matching_skills || "",
+      missing_skills: candidate.missing_skills || "",
+      relevant_experience: candidate.relevant_experience || "",
+      match_strengths: candidate.match_strengths || "",
+      match_concerns: candidate.match_concerns || "",
+      match_summary: candidate.match_summary || "",
+      applied_at: ordsTimestamp(candidate.applied_at),
+      scored_at: ordsTimestamp(candidate.scored_at),
     });
-    const response = result as { response_status?: string; response_message?: string };
-    if (response.response_status && response.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(response.response_message || "ORDS did not update the candidate.", 502, result);
+    const response = result as { response_status?: string; response_message?: string; repsonse_status?: string; repsonse_message?: string };
+    const responseStatus = String(response.response_status ?? response.repsonse_status ?? "SUCCESS").toUpperCase();
+    if (responseStatus !== "SUCCESS") throw new OrdsError(response.response_message || response.repsonse_message || "ORDS did not update the candidate.", 502, result);
     return NextResponse.json({ candidateId: candidate.job_candidate_id, status: payload.status, message: payload.status === "SHORTLISTED" ? "Candidate selected successfully." : "Candidate rejected successfully." });
   } catch (error) { return failure(error); }
 }

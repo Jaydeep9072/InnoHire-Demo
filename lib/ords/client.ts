@@ -33,11 +33,34 @@ export function getOrdsBaseUrl() {
   return (process.env.ORDS_BASE_URL || process.env.base_url || suppliedBaseUrl).replace(/\/$/, "");
 }
 
+function sanitizeForLog(value: unknown, key = ""): unknown {
+  const normalizedKey = key.toLowerCase();
+  if (/password|secret|api[_-]?key|authorization|access[_-]?token/.test(normalizedKey)) return "[REDACTED]";
+  if (normalizedKey === "resume_text" || normalizedKey === "resumebase64") {
+    const length = typeof value === "string" ? value.length : 0;
+    return `[REDACTED BASE64 RESUME: ${length} characters]`;
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeForLog(item));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [entryKey, sanitizeForLog(entryValue, entryKey)]));
+  }
+  return value;
+}
+
+function requestBodyForLog(body: BodyInit | null | undefined) {
+  if (typeof body !== "string") return body ? `[${body.constructor.name}]` : null;
+  try { return sanitizeForLog(JSON.parse(body)); }
+  catch { return body; }
+}
+
 async function requestOrds<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
+  const method = (init?.method || "GET").toUpperCase();
+  const url = `${getOrdsBaseUrl()}${path}`;
+  if (method === "POST") console.info("ORDS POST request", { url, payload: requestBodyForLog(init?.body) });
   try {
-    const response = await fetch(`${getOrdsBaseUrl()}${path}`, {
+    const response = await fetch(url, {
       ...init,
       cache: "no-store",
       signal: controller.signal,
@@ -46,10 +69,12 @@ async function requestOrds<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await response.text();
     let payload: unknown = null;
     try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
+    if (method === "POST") console.info("ORDS POST response", { url, status: response.status, ok: response.ok, payload: sanitizeForLog(payload) });
     if (!response.ok) throw new OrdsError(`ORDS request failed with status ${response.status}.`, response.status, payload);
     return payload as T;
   } catch (error) {
     if (error instanceof OrdsError) throw error;
+    if (method === "POST") console.error("ORDS POST transport error", { url, error: error instanceof Error ? error.message : "Unknown transport error" });
     if (error instanceof Error && error.name === "AbortError") throw new OrdsError("The ORDS request timed out.", 504);
     throw new OrdsError(error instanceof Error ? error.message : "ORDS could not be reached.");
   } finally { clearTimeout(timer); }
@@ -103,6 +128,7 @@ export async function listOrdsCandidates(): Promise<Candidate[]> {
     job_candidate_id: Number(row.job_candidate_id),
     job_posting_id: Number(row.job_posting_id),
     external_application_id: nullableString(row.external_application_id),
+    external_candidate_id: nullableString(row.external_candidate_id),
     full_name: nullableString(row.full_name),
     email_address: nullableString(row.email_address),
     phone_number: nullableString(row.phone_number),
@@ -122,6 +148,7 @@ export async function listOrdsCandidates(): Promise<Candidate[]> {
     match_concerns: nullableString(row.match_concerns),
     match_summary: nullableString(row.match_summary),
     applied_at: nullableString(row.applied_at),
+    scored_at: nullableString(row.scored_at),
     job_title: nullableString(row.job_title),
   }));
 }
