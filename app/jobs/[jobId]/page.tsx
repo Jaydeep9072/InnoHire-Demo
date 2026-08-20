@@ -39,7 +39,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
       <aside className={styles.sidebar}>
         <section><h2>Role details</h2><dl><Detail label="Seniority" value={label(job.seniority_level)} /><Detail label="Experience" value={job.minimum_experience == null ? null : `${job.minimum_experience} years minimum`} /><Detail label="Openings" value={job.openings_count?.toString()} /><Detail label="Closing date" value={formatDate(job.closing_date)} /><Detail label="Job boards" value={job.job_boards} /></dl></section>
         <section><h2>Compensation</h2><dl><Detail label="Minimum salary" value={formatMoney(job.min_salary, job.currency)} /><Detail label="Maximum salary" value={formatMoney(job.max_salary, job.currency)} /><Detail label="Currency" value={job.currency} /><Detail label="Pay frequency" value={label(job.pay_frequency)} /></dl></section>
-        <section><h2>Application</h2><dl><Detail label="LinkedIn draft ID" value={job.external_job_id} /><Detail label="Created" value={formatDate(job.created_at)} /><Detail label="Published" value={formatDate(job.published_at)} /></dl>{job.apply_url && <a className={styles.applyLink} href={job.apply_url} target="_blank" rel="noreferrer">Open candidate application page</a>}</section>
+        <section><h2>Application</h2><dl><Detail label="Apply URL" value={job.apply_url || "Not created"} /><Detail label="LinkedIn draft ID" value={job.external_job_id} /><Detail label="Created" value={formatDate(job.created_at)} /><Detail label="Published" value={formatDate(job.published_at)} /></dl>{job.apply_url && <a className={styles.applyLink} href={job.apply_url} target="_blank" rel="noreferrer">Open candidate application page</a>}</section>
       </aside>
     </div>
   </div>;
