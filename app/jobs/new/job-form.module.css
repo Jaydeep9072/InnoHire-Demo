@@ -31,7 +31,7 @@
 .formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .formGrid label, .fullField { display: flex; flex-direction: column; gap: 7px; color: #34413e; font-size: 12px; font-weight: 600; }
 .fullField { grid-column: 1 / -1; }
-.formGrid input, .formGrid select, .formGrid textarea { width: 100%; border: 1px solid #cfd9d6; border-radius: var(--radius-sm); background: #fff; color: var(--color-text); padding: 11px 12px; outline: none; transition: border-color .16s, box-shadow .16s; }
+.formGrid input, .formGrid select, .formGrid textarea { width: 100%; border: 1px solid #cfd9d6; border-radius: var(--radius-sm); background: #fff; color: var(--color-text); padding: 11px 12px; font-weight: 400; outline: none; transition: border-color .16s, box-shadow .16s; }
 .formGrid input:focus, .formGrid select:focus, .formGrid textarea:focus { border-color: var(--color-interactive); box-shadow: 0 0 0 3px rgba(21,155,142,.11); }
 .fullField textarea { min-height: 180px; resize: vertical; line-height: 1.6; }
 .formGrid input::placeholder, .fullField textarea::placeholder { color: #9aa5a2; font-weight: 400; }

@@ -176,7 +176,7 @@ export function toOrdsJobPayload(input: JobInput, state: JobPostingState = {}) {
     job_description: input.jobDescription || null,
     responsibilities: input.responsibilities || null,
     required_skills: input.requiredSkills || null,
-    job_board: input.jobBoards.join(", ") || null,
+    job_board: [...new Set(input.jobBoards.map((board) => board.trim()).filter(Boolean))].join(",") || null,
     minimum_experience: input.minimumExperience,
     salary: input.salary,
     currency: input.currency || null,

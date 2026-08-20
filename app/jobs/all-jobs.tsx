@@ -69,7 +69,7 @@ export function AllJobs() {
     <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div><p className={styles.eyebrow}>Job board</p><h1>All jobs</h1><p>Manage job drafts, published roles, and applicant activity in one place.</p></div>
-        <Link href="/jobs/new" className={styles.primaryAction}>＋ Post a job</Link>
+        <Link href="/jobs/new" className={styles.primaryAction}>Post a job</Link>
       </header>
 
       {actionMessage && <div role="status" className={actionMessage.type === "success" ? styles.actionSuccess : styles.actionError}>{actionMessage.text}</div>}

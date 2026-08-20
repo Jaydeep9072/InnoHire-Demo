@@ -69,7 +69,7 @@ export function JobForm() {
       const response = await fetch("/api/documents/extract", { method: "POST", body: formData });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "The document could not be read.");
-      setJob((current) => ({ ...current, ...payload.job, salary: payload.job.salary == null ? "" : formatMoneyInput(String(payload.job.salary)), minSalary: payload.job.minSalary == null ? "" : formatMoneyInput(String(payload.job.minSalary)), maxSalary: payload.job.maxSalary == null ? "" : formatMoneyInput(String(payload.job.maxSalary)), sourceFileName: file.name, sourceFileType: file.type || "application/octet-stream" }));
+      setJob((current) => ({ ...current, ...payload.job, salary: "", minSalary: payload.job.minSalary == null ? "" : formatMoneyInput(String(payload.job.minSalary)), maxSalary: payload.job.maxSalary == null ? "" : formatMoneyInput(String(payload.job.maxSalary)), sourceFileName: file.name, sourceFileType: file.type || "application/octet-stream" }));
       setActiveStep(0); setMessage({ type: "success", text: `The AI agent analyzed ${file.name} and filled the job form.` });
     } catch (error) { setMessage({ type: "error", text: error instanceof Error ? error.message : "The document could not be read." }); }
     finally { setBusy(null); }
@@ -112,11 +112,10 @@ export function JobForm() {
               <Field label="Employment type *"><select value={job.employmentType} onChange={(event) => update("employmentType", event.target.value as JobState["employmentType"])}><option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="CONTRACT">Contract</option><option value="TEMPORARY">Temporary</option><option value="INTERNSHIP">Internship</option><option value="OTHER">Other</option></select></Field>
               <Field label="Number of openings *"><input value={job.openingsCount} onChange={(event) => update("openingsCount", Number(event.target.value))} type="number" min="1" /></Field>
               <Field label="Application closing date"><input value={job.closingDate} onChange={(event) => update("closingDate", event.target.value)} type="date" /></Field>
-              <Field label="Salary"><input inputMode="numeric" value={job.salary} onChange={(event) => update("salary", formatMoneyInput(event.target.value))} placeholder="e.g. 120,000" /></Field>
               <Field label="Currency"><select value={job.currency} onChange={(event) => update("currency", event.target.value)}><option value="">Select currency</option>{currencies.map(([code, name]) => <option value={code} key={code}>{code} — {name}</option>)}</select></Field>
+              <Field label="Pay frequency"><select value={job.payFrequency} onChange={(event) => update("payFrequency", event.target.value as JobState["payFrequency"])}><option value="">Select frequency</option><option value="YEARLY">Yearly</option><option value="MONTHLY">Monthly</option><option value="HOURLY">Hourly</option></select></Field>
               <Field label="Minimum salary"><input inputMode="numeric" value={job.minSalary} onChange={(event) => update("minSalary", formatMoneyInput(event.target.value))} placeholder="e.g. 100,000" /></Field>
               <Field label="Maximum salary"><input inputMode="numeric" value={job.maxSalary} onChange={(event) => update("maxSalary", formatMoneyInput(event.target.value))} placeholder="e.g. 140,000" /></Field>
-              <Field label="Pay frequency"><select value={job.payFrequency} onChange={(event) => update("payFrequency", event.target.value as JobState["payFrequency"])}><option value="">Select frequency</option><option value="YEARLY">Yearly</option><option value="MONTHLY">Monthly</option><option value="HOURLY">Hourly</option></select></Field>
             </div>
           </>}
 

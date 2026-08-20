@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const payload = z.object({ candidateId: z.number().int().positive(), status: z.literal("REJECTED") }).parse(await request.json());
+    const payload = z.object({ candidateId: z.number().int().positive(), status: z.enum(["SHORTLISTED", "REJECTED"]) }).parse(await request.json());
     const candidate = (await listOrdsCandidates()).find((item) => item.job_candidate_id === payload.candidateId);
     if (!candidate) return NextResponse.json({ error: "Candidate not found." }, { status: 404 });
     const result = await createOrdsCandidate({
@@ -84,6 +84,6 @@ export async function PATCH(request: NextRequest) {
     });
     const response = result as { response_status?: string; response_message?: string };
     if (response.response_status && response.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(response.response_message || "ORDS did not update the candidate.", 502, result);
-    return NextResponse.json({ candidateId: candidate.job_candidate_id, status: payload.status, message: "Candidate rejected successfully." });
+    return NextResponse.json({ candidateId: candidate.job_candidate_id, status: payload.status, message: payload.status === "SHORTLISTED" ? "Candidate selected successfully." : "Candidate rejected successfully." });
   } catch (error) { return failure(error); }
 }
