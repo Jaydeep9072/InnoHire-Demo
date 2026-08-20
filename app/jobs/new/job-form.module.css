@@ -40,11 +40,12 @@
 .richToolbar { min-height: 43px; display: flex; align-items: center; flex-wrap: wrap; gap: 3px; padding: 6px 8px; border-bottom: 1px solid #dce4e1; background: #f8faf9; }
 .richToolbar button { min-width: 31px; height: 29px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #40504c; font-size: 11px; cursor: pointer; }
 .richToolbar button:hover { border-color: #cbd9d5; background: #fff; color: var(--color-primary); }
+.richToolbar .toolbarButtonActive, .richToolbar .toolbarButtonActive:hover { border-color: #91cfc4; background: var(--color-mint); color: var(--color-primary); }
 .toolbarDivider { width: 1px; height: 20px; margin: 0 4px; background: #d4ddda; }
 .richEditorContent { min-height: 210px; padding: 15px 16px; color: var(--color-text); font-size: 13px; font-weight: 400; line-height: 1.7; outline: 0; overflow-wrap: anywhere; }
 .richEditorContent:empty::before { content: attr(data-placeholder); color: #9aa5a2; pointer-events: none; }
 .richEditorContent p { margin: 0 0 10px; }.richEditorContent p:last-child { margin-bottom: 0; }
-.richEditorContent h2, .richEditorContent h3 { margin: 14px 0 7px; font-size: 15px; }.richEditorContent ul, .richEditorContent ol { margin: 8px 0; padding-left: 24px; }
+.richEditorContent h2, .richEditorContent h3 { margin: 14px 0 7px; font-size: 15px; }.richEditorContent ul, .richEditorContent ol { margin: 8px 0; padding-left: 28px; }.richEditorContent ul { list-style: disc outside; }.richEditorContent ol { list-style: decimal outside; }.richEditorContent li { display: list-item; padding-left: 3px; }
 .richEditorContent blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid #80c9bc; background: #f2faf8; color: #53635f; }
 .segmented { display: grid; grid-template-columns: repeat(3,1fr); border: 1px solid #cfd9d6; border-radius: var(--radius-sm); overflow: hidden; }
 .segmented button { min-height: 39px; border: 0; border-right: 1px solid #cfd9d6; background: #fff; color: var(--color-text-secondary); cursor: pointer; }
