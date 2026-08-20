@@ -29,9 +29,7 @@ export function applicationToken(value: string) {
 }
 
 export function findJobByApplicationToken(jobs: OrdsJob[], token: string) {
-  const safeToken = applicationToken(token);
-  if (!safeToken) return null;
-  const jobToken = /^job-(\d+)$/.exec(safeToken);
+  const jobToken = /^job-(\d+)$/.exec(token.trim());
   if (jobToken) {
     const jobId = Number(jobToken[1]);
     return jobs.find((job) => {
@@ -39,6 +37,8 @@ export function findJobByApplicationToken(jobs: OrdsJob[], token: string) {
       return job.job_posting_id === jobId && (status === "DRAFT" || status === "PUBLISHED");
     }) || null;
   }
+  const safeToken = applicationToken(token);
+  if (!safeToken) return null;
   return jobs.find((job) => {
     if (!job.apply_url) return false;
     const status = (job.posting_status || "").toUpperCase();

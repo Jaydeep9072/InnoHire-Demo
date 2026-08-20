@@ -1,7 +1,10 @@
 import { Buffer } from "node:buffer";
 import { NextRequest, NextResponse } from "next/server";
+import pdfParse from "pdf-parse";
 import { z, ZodError } from "zod";
 import { findJobByApplicationToken } from "@/lib/applications/urls";
+import { matchCandidateToJob, type CandidateMatch } from "@/lib/ai/candidate-matching-agent";
+import { scoreCandidate } from "@/lib/candidate-matching/score";
 import { createOrdsCandidate, listOrdsJobs, OrdsError } from "@/lib/ords/client";
 
 export const runtime = "nodejs";
@@ -30,6 +33,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!resume.length || resume.length > maximumResumeBytes || resume.subarray(0, 5).toString("ascii") !== "%PDF-") {
       return NextResponse.json({ error: "Upload a valid PDF résumé no larger than 3 MB." }, { status: 400 });
     }
+    let match: CandidateMatch;
+    try {
+      match = await matchCandidateToJob({
+        job,
+        resume,
+        candidate: {
+          currentCompany: application.currentCompany,
+          currentPosition: application.currentPosition,
+          yearsOfExperience: application.yearsOfExperience,
+        },
+      });
+    } catch (error) {
+      console.error("Gemini candidate matching failed; using evidence-only fallback scoring.", error);
+      let resumeText = "";
+      try { resumeText = (await pdfParse(resume)).text; }
+      catch (parseError) { console.error("Resume text extraction failed during fallback scoring.", parseError); }
+      const fallback = scoreCandidate({
+        title: job.title || "this role",
+        requiredSkills: job.required_skills || "",
+        preferredSkills: "",
+        minimumExperience: job.minimum_experience || 0,
+      }, {
+        resumeText,
+        headline: application.currentPosition || "",
+        currentPosition: application.currentPosition || "",
+        yearsOfExperience: application.yearsOfExperience || 0,
+      });
+      match = {
+        matchScore: fallback.score,
+        matchingSkills: fallback.matchingSkills,
+        missingSkills: fallback.missingSkills,
+        relevantExperience: application.currentPosition || "Experience details were not available for automated review.",
+        strengths: fallback.strengths,
+        concerns: fallback.concerns,
+        summary: fallback.summary,
+      };
+    }
     const result = await createOrdsCandidate({
       job_posting_id: job.job_posting_id,
       external_application_id: application.externalApplicationId,
@@ -45,6 +85,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       current_company: application.currentCompany || null,
       current_position: application.currentPosition || null,
       years_of_experience: application.yearsOfExperience ?? null,
+      application_status: "APPLIED",
+      match_score: match.matchScore,
+      matching_skills: match.matchingSkills.join(", ") || null,
+      missing_skills: match.missingSkills.join(", ") || null,
+      relevant_experience: match.relevantExperience || null,
+      match_strengths: match.strengths.join("\n") || null,
+      match_concerns: match.concerns.join("\n") || null,
+      match_summary: match.summary,
       applied_at: new Date().toISOString(),
     });
     const status = String(result.response_status ?? result.repsonse_status ?? "SUCCESS").toUpperCase();

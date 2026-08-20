@@ -82,7 +82,12 @@ export function JobForm() {
   async function save(action: "draft" | "submit") {
     setBusy(action); setMessage(null);
     try {
-      const response = await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ action, job }) });
+      const jobForSubmission = job.applyUrl ? job : {
+        ...job,
+        applyUrl: `${window.location.origin}/apply/request-${crypto.randomUUID()}`,
+      };
+      setJob(jobForSubmission);
+      const response = await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ action, job: jobForSubmission }) });
       const payload = await response.json();
       if (!response.ok) {
         const firstFieldError = payload.fields ? Object.values(payload.fields).flat().find(Boolean) : null;

@@ -77,14 +77,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(update);
     }
     const parsedJob = (action === "submit" ? publishJobSchema : jobDraftSchema).parse(payload.job);
-    const generatedApplyUrl = !parsedJob.applyUrl;
     const result = await createOrdsJob(parsedJob, { externalJobId: null, postingStatus: "DRAFT" });
     if (result.response_status && result.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(result.response_message || "ORDS did not create the job.", 502, result);
     const jobId = Number(result.job_posting_id);
     if (!Number.isFinite(jobId) || jobId <= 0) throw new OrdsError("ORDS created the job but did not return its ID.", 502, result);
-    const applyUrl = parsedJob.applyUrl || createJobApplicationUrl(jobId, request.nextUrl.origin);
+    const applyUrl = createJobApplicationUrl(jobId, request.nextUrl.origin);
     const job = { ...parsedJob, applyUrl };
-    if (generatedApplyUrl) {
+    if (parsedJob.applyUrl !== applyUrl) {
       const applyUrlUpdate = await createOrdsJob({ ...job, localJobId: jobId }, { externalJobId: null, postingStatus: "DRAFT" });
       if (applyUrlUpdate.response_status && applyUrlUpdate.response_status.toUpperCase() !== "SUCCESS") throw new OrdsError(applyUrlUpdate.response_message || "The job was created, but ORDS did not save its application URL.", 502, applyUrlUpdate);
     }
