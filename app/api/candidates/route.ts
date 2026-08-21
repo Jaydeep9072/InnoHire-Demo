@@ -114,9 +114,9 @@ export async function PATCH(request: NextRequest) {
       applied_at: ordsTimestamp(candidate.applied_at),
       scored_at: ordsTimestamp(candidate.scored_at),
     });
-    const response = result as { response_status?: string; response_message?: string; repsonse_status?: string; repsonse_message?: string };
-    const responseStatus = String(response.response_status ?? response.repsonse_status ?? "SUCCESS").toUpperCase();
-    if (responseStatus !== "SUCCESS") throw new OrdsError(response.response_message || response.repsonse_message || "ORDS did not update the candidate.", 502, result);
+    const response = result as { response_status?: string; response_message?: string; repsonse_status?: string; repsonse_message?: string; p_resp_status?: string; p_resp_message?: string; P_RESP_STATUS?: string; P_RESP_MESSAGE?: string };
+    const responseStatus = String(response.response_status ?? response.repsonse_status ?? response.p_resp_status ?? response.P_RESP_STATUS ?? "SUCCESS").toUpperCase();
+    if (responseStatus !== "SUCCESS") throw new OrdsError(response.response_message || response.repsonse_message || response.p_resp_message || response.P_RESP_MESSAGE || "ORDS did not update the candidate.", 502, result);
     return NextResponse.json({ candidateId: candidate.job_candidate_id, status: payload.status, message: payload.status === "SHORTLISTED" ? "Candidate selected successfully." : "Candidate rejected successfully." });
   } catch (error) { return failure(error); }
 }

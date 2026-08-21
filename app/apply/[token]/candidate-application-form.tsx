@@ -11,6 +11,11 @@ type FormState = {
 };
 
 const initialForm: FormState = { fullName: "", emailAddress: "", phoneNumber: "", candidateLocation: "", currentCompany: "", currentPosition: "", yearsOfExperience: "", linkedinProfileUrl: "" };
+function decimalOnly(value: string) {
+  const sanitized = value.replace(/[^\d.]/g, "");
+  const [whole = "", ...fractionParts] = sanitized.split(".");
+  return fractionParts.length ? `${whole}.${fractionParts.join("")}` : whole;
+}
 
 export function CandidateApplicationForm({ token, jobTitle }: { token: string; jobTitle: string }) {
   const [form, setForm] = useState(initialForm);
@@ -60,7 +65,7 @@ export function CandidateApplicationForm({ token, jobTitle }: { token: string; j
       <Field label="LinkedIn profile"><input type="url" placeholder="https://linkedin.com/in/..." value={form.linkedinProfileUrl} onChange={(event) => update("linkedinProfileUrl", event.target.value)} /></Field>
       <Field label="Current company"><input value={form.currentCompany} onChange={(event) => update("currentCompany", event.target.value)} /></Field>
       <Field label="Current position"><input value={form.currentPosition} onChange={(event) => update("currentPosition", event.target.value)} /></Field>
-      <Field label="Years of experience"><input min="0" max="80" step="0.5" type="number" value={form.yearsOfExperience} onChange={(event) => update("yearsOfExperience", event.target.value)} /></Field>
+      <Field label="Years of experience"><input type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={form.yearsOfExperience} onChange={(event) => update("yearsOfExperience", decimalOnly(event.target.value))} /></Field>
       <Field label="Résumé (PDF) *" full><label className={styles.resumeUpload}><input required type="file" accept="application/pdf,.pdf" onChange={(event) => void selectResume(event.target.files?.[0])} /><span>{resume ? "PDF" : "↑"}</span><div><strong>{resume?.fileName || "Choose your résumé"}</strong><small>PDF only · maximum 3 MB</small></div><b>{resume ? "Replace" : "Browse"}</b></label></Field>
     </div>
     <label className={styles.consent}><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I confirm that the information provided is accurate and may be used to process this application.</span></label>

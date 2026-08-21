@@ -22,21 +22,27 @@ const currencies = [
 ];
 type JobState = {
   localJobId?: number; title: string; department: string; jobDescription: string; responsibilities: string;
-  requiredSkills: string; minimumExperience: number; location: string;
+  requiredSkills: string; minimumExperience: string; location: string;
   salary: string; currency: string; minSalary: string; maxSalary: string; payFrequency: "YEARLY" | "MONTHLY" | "HOURLY" | "";
   workplaceType: "ON_SITE" | "HYBRID" | "REMOTE"; employmentType: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "TEMPORARY" | "OTHER" | "VOLUNTEER" | "INTERNSHIP";
-  seniorityLevel: string; openingsCount: number; closingDate: string; sourceFileName?: string; sourceFileType?: string; jobBoards: string[];
+  seniorityLevel: string; openingsCount: string; closingDate: string; sourceFileName?: string; sourceFileType?: string; jobBoards: string[];
   applyUrl?: string;
   linkedinJobTitleId: string; linkedinCompanyId: string; linkedinLocationId: string; notificationEmail: string;
 };
 
 const initialJob: JobState = {
   title: "", department: "", jobDescription: "", responsibilities: "", requiredSkills: "",
-  minimumExperience: 0, salary: "", currency: "", minSalary: "", maxSalary: "", payFrequency: "", location: "", workplaceType: "ON_SITE", employmentType: "FULL_TIME", seniorityLevel: "",
-  openingsCount: 1, closingDate: "", jobBoards: [], linkedinJobTitleId: "", linkedinCompanyId: "", linkedinLocationId: "", notificationEmail: "",
+  minimumExperience: "0", salary: "", currency: "", minSalary: "", maxSalary: "", payFrequency: "", location: "", workplaceType: "ON_SITE", employmentType: "FULL_TIME", seniorityLevel: "",
+  openingsCount: "1", closingDate: "", jobBoards: [], linkedinJobTitleId: "", linkedinCompanyId: "", linkedinLocationId: "", notificationEmail: "",
 };
 
 function hasEditorContent(value: string) { return value.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0; }
+function digitsOnly(value: string) { return value.replace(/\D/g, ""); }
+function decimalOnly(value: string) {
+  const sanitized = value.replace(/[^\d.]/g, "");
+  const [whole = "", ...fractionParts] = sanitized.split(".");
+  return fractionParts.length ? `${whole}.${fractionParts.join("")}` : whole;
+}
 function formatMoneyInput(value: string) { const digits = value.replace(/\D/g, ""); return digits ? new Intl.NumberFormat("en-US").format(Number(digits)) : ""; }
 function apiErrorMessage(payload: { error?: unknown }, fallback: string) {
   return typeof payload.error === "string" && payload.error.trim() ? payload.error.trim() : fallback;
@@ -54,7 +60,7 @@ export function JobForm() {
 
   const publishingReady = !jobBoardSelectionEnabled || (job.jobBoards.length > 0 && (!job.jobBoards.includes("LinkedIn") || Boolean(job.linkedinCompanyId && job.linkedinLocationId)));
   const stepChecks = [
-    Boolean(job.title && job.department && job.seniorityLevel && job.location && job.workplaceType && job.employmentType && job.openingsCount > 0),
+    Boolean(job.title && job.department && job.seniorityLevel && job.location && job.workplaceType && job.employmentType && Number(job.openingsCount) > 0),
     Boolean(hasEditorContent(job.jobDescription) && hasEditorContent(job.responsibilities)),
     Boolean(job.requiredSkills),
     publishingReady,
@@ -73,7 +79,7 @@ export function JobForm() {
       const response = await fetch("/api/documents/extract", { method: "POST", body: formData });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "The document could not be read.");
-      setJob((current) => ({ ...current, ...payload.job, salary: "", minSalary: payload.job.minSalary == null ? "" : formatMoneyInput(String(payload.job.minSalary)), maxSalary: payload.job.maxSalary == null ? "" : formatMoneyInput(String(payload.job.maxSalary)), sourceFileName: file.name, sourceFileType: file.type || "application/octet-stream" }));
+      setJob((current) => ({ ...current, ...payload.job, minimumExperience: decimalOnly(String(payload.job.minimumExperience ?? 0)), openingsCount: digitsOnly(String(payload.job.openingsCount ?? 1)) || "1", salary: "", minSalary: payload.job.minSalary == null ? "" : formatMoneyInput(String(payload.job.minSalary)), maxSalary: payload.job.maxSalary == null ? "" : formatMoneyInput(String(payload.job.maxSalary)), sourceFileName: file.name, sourceFileType: file.type || "application/octet-stream" }));
       setActiveStep(0); setMessage({ type: "success", text: `The AI agent analyzed ${file.name} and filled the job form.` });
     } catch (error) { setMessage({ type: "error", text: error instanceof Error ? error.message : "The document could not be read." }); }
     finally { setBusy(null); }
@@ -127,7 +133,7 @@ export function JobForm() {
               <Field label="Location *"><input value={job.location} onChange={(event) => update("location", event.target.value)} placeholder="City, state or country" /></Field>
               <Field label="Workplace type *"><div className={styles.segmented}>{(["ON_SITE", "HYBRID", "REMOTE"] as const).map((value) => <button type="button" key={value} onClick={() => update("workplaceType", value)} className={job.workplaceType === value ? styles.segmentActive : undefined}>{value === "ON_SITE" ? "On-site" : value[0] + value.slice(1).toLowerCase()}</button>)}</div></Field>
               <Field label="Employment type *"><select value={job.employmentType} onChange={(event) => update("employmentType", event.target.value as JobState["employmentType"])}><option value="FULL_TIME">Full-time</option><option value="PART_TIME">Part-time</option><option value="CONTRACT">Contract</option><option value="TEMPORARY">Temporary</option><option value="INTERNSHIP">Internship</option><option value="OTHER">Other</option></select></Field>
-              <Field label="Number of openings *"><input value={job.openingsCount} onChange={(event) => update("openingsCount", Number(event.target.value))} type="number" min="1" /></Field>
+              <Field label="Number of openings *"><input type="text" inputMode="numeric" pattern="[0-9]*" value={job.openingsCount} onChange={(event) => update("openingsCount", digitsOnly(event.target.value))} /></Field>
               <Field label="Application closing date"><input value={job.closingDate} onChange={(event) => update("closingDate", event.target.value)} type="date" /></Field>
             </div>
             <div className={styles.sectionDivider} />
@@ -153,7 +159,7 @@ export function JobForm() {
             <div className={styles.notice}><span>✦</span><div><strong>Explainable matching</strong><p>Skills and experience below are compared only with the candidate’s professional profile and résumé content.</p></div></div>
             <div className={styles.formGrid}>
               <Field label="Required skills *" full><textarea value={job.requiredSkills} onChange={(event) => update("requiredSkills", event.target.value)} rows={7} placeholder="Enter skills separated by commas or one per line…" /></Field>
-              <Field label="Minimum experience (years)"><input value={job.minimumExperience} onChange={(event) => update("minimumExperience", Number(event.target.value))} type="number" min="0" max="80" /></Field>
+              <Field label="Minimum experience (years)"><input type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={job.minimumExperience} onChange={(event) => update("minimumExperience", decimalOnly(event.target.value))} /></Field>
             </div>
           </>}
 

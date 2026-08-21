@@ -58,7 +58,7 @@ async function requestOrds<T>(path: string, init?: RequestInit): Promise<T> {
   const timer = setTimeout(() => controller.abort(), 20_000);
   const method = (init?.method || "GET").toUpperCase();
   const url = `${getOrdsBaseUrl()}${path}`;
-  if (method === "POST") console.info("ORDS POST request", { url, payload: requestBodyForLog(init?.body) });
+  if (method === "POST") console.info(`ORDS POST request\n${JSON.stringify({ url, payload: requestBodyForLog(init?.body) }, null, 2)}`);
   try {
     const response = await fetch(url, {
       ...init,
@@ -69,7 +69,7 @@ async function requestOrds<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await response.text();
     let payload: unknown = null;
     try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
-    if (method === "POST") console.info("ORDS POST response", { url, status: response.status, ok: response.ok, payload: sanitizeForLog(payload) });
+    if (method === "POST") console.info(`ORDS POST response\n${JSON.stringify({ url, status: response.status, ok: response.ok, payload: sanitizeForLog(payload) }, null, 2)}`);
     if (!response.ok) throw new OrdsError(`ORDS request failed with status ${response.status}.`, response.status, payload);
     return payload as T;
   } catch (error) {
@@ -234,7 +234,7 @@ export async function createOrdsCandidate(payload: Record<string, unknown>) {
 }
 
 export async function getOrdsCandidateResume(candidateId: number) {
-  const response = await requestOrds<OrdsCollection<Record<string, unknown>>>("/candidate");
+  const response = await requestOrds<OrdsCollection<Record<string, unknown>>>(`/candidate?job_candidate_id=${encodeURIComponent(candidateId)}`);
   const row = (response.items || []).find((item) => Number(item.job_candidate_id) === candidateId);
-  return row ? nullableString(row.resume_text) : null;
+  return row ? nullableString(row.resume_text ?? row.resume_base64) : null;
 }

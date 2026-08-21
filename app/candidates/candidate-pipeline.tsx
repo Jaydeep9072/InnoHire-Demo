@@ -22,10 +22,6 @@ export function CandidatePipeline() {
   const [schedule, setSchedule] = useState({ provider: "google", date: "", time: "" });
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleMessage, setScheduleMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectBusy, setRejectBusy] = useState(false);
-  const [selectBusy, setSelectBusy] = useState(false);
-  const [candidateMessage, setCandidateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,33 +66,6 @@ export function CandidatePipeline() {
     finally { setScheduleBusy(false); }
   }
 
-  async function rejectCandidate() {
-    if (!selected) return;
-    setRejectBusy(true); setCandidateMessage(null);
-    try {
-      const response = await fetch("/api/candidates", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: selected.job_candidate_id, status: "REJECTED" }) });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "The candidate could not be rejected.");
-      setRejectOpen(false);
-      setCandidateMessage({ type: "success", text: payload.message || "Candidate rejected successfully." });
-      await load();
-    } catch (error) { setCandidateMessage({ type: "error", text: error instanceof Error ? error.message : "The candidate could not be rejected." }); }
-    finally { setRejectBusy(false); }
-  }
-
-  async function selectCandidate() {
-    if (!selected) return;
-    setSelectBusy(true); setCandidateMessage(null);
-    try {
-      const response = await fetch("/api/candidates", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ candidateId: selected.job_candidate_id, status: "SHORTLISTED" }) });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "The candidate could not be selected.");
-      setCandidateMessage({ type: "success", text: payload.message || "Candidate selected successfully." });
-      await load();
-    } catch (error) { setCandidateMessage({ type: "error", text: error instanceof Error ? error.message : "The candidate could not be selected." }); }
-    finally { setSelectBusy(false); }
-  }
-
   return (
     <div className={styles.page}>
       <header className={styles.pageHeader}>
@@ -133,8 +102,7 @@ export function CandidatePipeline() {
           <section className={styles.profilePanel}>
             {!selected ? <div className={styles.panelEmpty}><span>◎</span><h2>Select a candidate</h2><p>Candidate profile, match evidence, and experience will appear here.</p></div> : <>
               <div className={styles.profileHeader}><div className={styles.profileAvatar}>{initials(selected.full_name)}</div><div><span className={styles.statusBadge}>{stageLabels[(selected.application_status || "APPLIED").toUpperCase()] || selected.application_status}</span><h2>{selected.full_name}</h2><p>{selected.headline || selected.current_position || "Candidate profile"}</p></div><div className={styles.scoreRing} style={{ "--score": selected.match_score || 0 } as React.CSSProperties}><div><strong>{selected.match_score ?? "—"}</strong><span>% match</span></div></div></div>
-              <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton}>AI Screening</button><button type="button" className={styles.selectButton} onClick={selectCandidate} disabled={selectBusy || (selected.application_status || "").toUpperCase() === "SHORTLISTED"}>{selectBusy ? "Selecting…" : (selected.application_status || "").toUpperCase() === "SHORTLISTED" ? "Selected" : "Select candidate"}</button><button type="button" className={styles.scheduleButton} onClick={() => { setScheduleOpen(true); setScheduleMessage(null); }}>Schedule an interview</button><button type="button" className={styles.rejectButton} onClick={() => { setRejectOpen(true); setCandidateMessage(null); }} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"}>{(selected.application_status || "").toUpperCase() === "REJECTED" ? "Rejected" : "Reject candidate"}</button></div>
-              {candidateMessage && <div role="status" className={candidateMessage.type === "success" ? styles.candidateSuccess : styles.candidateError}>{candidateMessage.text}</div>}
+              <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton}>AI Screening</button><button type="button" className={styles.scheduleButton} onClick={() => { setScheduleOpen(true); setScheduleMessage(null); }}>Schedule an interview</button></div>
               <section className={styles.matchSummary}><span>✦</span><div><strong>Match summary</strong><p>{selected.match_summary || "A match summary has not been generated for this applicant."}</p></div></section>
               <div className={styles.infoGrid}><div><span>Current position</span><strong>{selected.current_position || "Not provided"}</strong></div><div><span>Current company</span><strong>{selected.current_company || "Not provided"}</strong></div><div><span>Experience</span><strong>{selected.years_of_experience == null ? "Not provided" : `${selected.years_of_experience} years`}</strong></div><div><span>Location</span><strong>{selected.candidate_location || "Not provided"}</strong></div></div>
               <section className={styles.contactSection}><h3>Contact and application</h3><dl><div><dt>Email</dt><dd>{selected.email_address || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{selected.phone_number || "Not provided"}</dd></div><div><dt>Applied</dt><dd>{selected.applied_at ? new Date(selected.applied_at).toLocaleDateString() : "Not provided"}</dd></div><div><dt>Job</dt><dd>{selected.job_title || `Job ${selected.job_posting_id}`}</dd></div><div><dt>Résumé</dt><dd><a className={styles.resumeLink} href={`/api/candidates/${selected.job_candidate_id}/resume`} target="_blank" rel="noreferrer">View PDF résumé</a></dd></div></dl></section>
@@ -164,14 +132,6 @@ export function CandidatePipeline() {
           <div className={styles.scheduleFields}><label><span>Date</span><input type="date" value={schedule.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setSchedule((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Time</span><input type="time" value={schedule.time} onChange={(event) => setSchedule((current) => ({ ...current, time: event.target.value }))} /></label></div>
           {scheduleMessage && <div className={scheduleMessage.type === "success" ? styles.scheduleSuccess : styles.scheduleError}>{scheduleMessage.text}</div>}
           <footer><button type="button" className={styles.cancelButton} onClick={() => setScheduleOpen(false)}>Cancel</button><button type="button" className={styles.scheduleSubmit} onClick={submitInterview} disabled={scheduleBusy}>{scheduleBusy ? "Creating meeting…" : "Create meeting and send email"}</button></footer>
-        </section>
-      </div>}
-      {rejectOpen && selected && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !rejectBusy) setRejectOpen(false); }}>
-        <section className={styles.rejectModal} role="dialog" aria-modal="true" aria-labelledby="reject-title">
-          <span className={styles.rejectIcon}>!</span>
-          <h2 id="reject-title">Reject this candidate?</h2>
-          <p><strong>{selected.full_name || "This candidate"}</strong> will move to the Rejected stage. Their information will remain available for reporting.</p>
-          <footer><button type="button" className={styles.cancelButton} onClick={() => setRejectOpen(false)} disabled={rejectBusy}>Cancel</button><button type="button" className={styles.rejectSubmit} onClick={rejectCandidate} disabled={rejectBusy}>{rejectBusy ? "Rejecting…" : "Reject candidate"}</button></footer>
         </section>
       </div>}
     </div>

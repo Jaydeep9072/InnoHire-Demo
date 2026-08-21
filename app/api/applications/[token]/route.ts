@@ -8,7 +8,13 @@ import { createOrdsCandidate, listOrdsJobs, OrdsError } from "@/lib/ords/client"
 
 export const runtime = "nodejs";
 const maximumResumeBytes = 3 * 1024 * 1024;
+const shortlistMatchThreshold = 60;
 const oracleTimestamp = () => new Date().toISOString().slice(0, 19);
+
+function assertOrdsSuccess(result: Record<string, unknown>) {
+  const status = String(result.response_status ?? result.repsonse_status ?? result.p_resp_status ?? result.P_RESP_STATUS ?? "SUCCESS").toUpperCase();
+  if (status !== "SUCCESS") throw new OrdsError(String(result.response_message ?? result.repsonse_message ?? result.p_resp_message ?? result.P_RESP_MESSAGE ?? "The application could not be saved."), 502, result);
+}
 
 const applicationSchema = z.object({
   externalApplicationId: z.string().uuid(),
@@ -35,6 +41,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Upload a valid PDF résumé no larger than 3 MB." }, { status: 400 });
     }
     const appliedAt = oracleTimestamp();
+    const externalApplicationId = `APP-WEB-${application.externalApplicationId}`;
+    const externalCandidateId = `CAND-WEB-${application.externalApplicationId}`;
+    const candidatePayload = {
+      job_posting_id: job.job_posting_id,
+      external_application_id: externalApplicationId,
+      external_candidate_id: externalCandidateId,
+      full_name: application.fullName,
+      email_address: application.emailAddress,
+      phone_number: application.phoneNumber,
+      headline: application.currentPosition || "",
+      candidate_location: application.candidateLocation,
+      linkedin_profile_url: application.linkedinProfileUrl || "",
+      resume_url: "",
+      resume_text: application.resumeBase64,
+      current_company: application.currentCompany || "",
+      current_position: application.currentPosition || "",
+      years_of_experience: application.yearsOfExperience ?? "",
+      applied_at: appliedAt,
+    };
     let match: CandidateMatch;
     try {
       match = await matchCandidateToJob({
@@ -70,21 +95,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       };
     }
     const result = await createOrdsCandidate({
-      job_posting_id: job.job_posting_id,
-      external_application_id: `APP-WEB-${application.externalApplicationId}`,
-      external_candidate_id: `CAND-WEB-${application.externalApplicationId}`,
-      full_name: application.fullName,
-      email_address: application.emailAddress,
-      phone_number: application.phoneNumber,
-      headline: application.currentPosition || "",
-      candidate_location: application.candidateLocation,
-      linkedin_profile_url: application.linkedinProfileUrl || "",
-      resume_url: "",
-      resume_text: application.resumeBase64,
-      current_company: application.currentCompany || "",
-      current_position: application.currentPosition || "",
-      years_of_experience: application.yearsOfExperience ?? "",
-      application_status: "APPLIED",
+      job_candidate_id: "",
+      ...candidatePayload,
+      application_status: match.matchScore >= shortlistMatchThreshold ? "SHORTLISTED" : "REJECTED",
       match_score: match.matchScore,
       matching_skills: match.matchingSkills.join(", ") || "",
       missing_skills: match.missingSkills.join(", ") || "",
@@ -92,11 +105,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       match_strengths: match.strengths.join("\n") || "",
       match_concerns: match.concerns.join("\n") || "",
       match_summary: match.summary || "",
-      applied_at: appliedAt,
       scored_at: oracleTimestamp(),
     });
-    const status = String(result.response_status ?? result.repsonse_status ?? "SUCCESS").toUpperCase();
-    if (status !== "SUCCESS") throw new OrdsError(String(result.response_message ?? result.repsonse_message ?? "The application could not be saved."), 502, result);
+    assertOrdsSuccess(result);
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof ZodError) return NextResponse.json({ error: "Complete all required fields and attach a valid PDF résumé." }, { status: 400 });

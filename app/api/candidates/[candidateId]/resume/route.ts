@@ -4,17 +4,27 @@ import { getOrdsCandidateResume, OrdsError } from "@/lib/ords/client";
 
 export const runtime = "nodejs";
 
+function pdfBase64(value: string) {
+  const trimmed = value.trim();
+  const dataUrlMatch = /^data:application\/pdf(?:;[^,]*)?;base64,([\s\S]*)$/i.exec(trimmed);
+  return (dataUrlMatch?.[1] ?? trimmed).replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ candidateId: string }> }) {
+  const candidateIdValue = (await params).candidateId;
   try {
-    const candidateId = Number((await params).candidateId);
+    const candidateId = Number(candidateIdValue);
     if (!Number.isInteger(candidateId) || candidateId <= 0) return NextResponse.json({ error: "Invalid candidate." }, { status: 400 });
     const encoded = await getOrdsCandidateResume(candidateId);
     if (!encoded) return NextResponse.json({ error: "A résumé is not available for this candidate." }, { status: 404 });
-    const pdf = Buffer.from(encoded, "base64");
+    const pdf = Buffer.from(pdfBase64(encoded), "base64");
     if (!pdf.length || pdf.subarray(0, 5).toString("ascii") !== "%PDF-") return NextResponse.json({ error: "The stored résumé is not a valid PDF." }, { status: 422 });
     return new NextResponse(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="candidate-${candidateId}-resume.pdf"`, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
   } catch (error) {
-    if (error instanceof OrdsError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof OrdsError) {
+      console.error("ORDS candidate résumé lookup failed", { candidateId: candidateIdValue, status: error.status, message: error.message, details: error.details });
+      return NextResponse.json({ error: "The résumé could not be loaded right now. Please try again shortly." }, { status: error.status });
+    }
     return NextResponse.json({ error: "The résumé could not be opened." }, { status: 500 });
   }
 }

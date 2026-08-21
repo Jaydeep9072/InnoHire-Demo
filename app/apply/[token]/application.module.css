@@ -22,13 +22,14 @@
 .formGrid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
 .formGrid > label:not(.resumeUpload) { display: grid; align-content: start; gap: 7px; color: #34423f; font-size: 11px; font-weight: 600; }
 .fullField { grid-column: 1 / -1; }
-.formGrid input:not([type="file"]) { width: 100%; height: 43px; padding: 0 12px; border: 1px solid #ccd8d4; border-radius: 6px; background: #fff; color: var(--color-text); outline: 0; }
+.formGrid input:not([type="file"]) { width: 100%; height: 43px; padding: 0 12px; border: 1px solid #ccd8d4; border-radius: 6px; background: #fff; color: var(--color-text); font-weight: 400; outline: 0; }
+.formGrid input::placeholder { font-weight: 400; }
 .formGrid input:focus { border-color: var(--color-interactive); box-shadow: 0 0 0 3px rgba(21,155,142,.1); }
 .resumeUpload { min-height: 82px; display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 12px; padding: 14px; border: 1px dashed #8fc8bd; border-radius: 7px; background: #f6fbfa; cursor: pointer; }
 .resumeUpload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .resumeUpload > span { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 6px; background: var(--color-mint); color: var(--color-primary); font-size: 10px; font-weight: 750; }
 .resumeUpload strong, .resumeUpload small { display: block; }
-.resumeUpload strong { margin-bottom: 4px; font-size: 12px; }
+.resumeUpload strong { margin-bottom: 4px; font-size: 12px; font-weight: 400; }
 .resumeUpload small { color: var(--color-text-secondary); font-size: 10px; font-weight: 400; }
 .resumeUpload b { color: var(--color-primary); font-size: 11px; }
 .consent { display: flex; align-items: flex-start; gap: 9px; margin: 24px 0; color: var(--color-text-secondary); font-size: 10px; line-height: 1.6; cursor: pointer; }
