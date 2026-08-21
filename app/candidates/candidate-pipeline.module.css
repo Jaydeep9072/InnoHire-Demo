@@ -50,6 +50,7 @@
 .scoreRing span { color: var(--color-text-secondary); font-size: 9px; }
 .profileActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
 .profileActions button { min-height: 40px; padding: 9px 10px; border: 1px solid var(--color-primary); border-radius: var(--radius-sm); background: var(--color-primary); color: #fff; text-align: center; font-size: 11px; font-weight: 650; cursor: pointer; }
+.profileActions button:disabled { border-color: #aebbb7; background: #d7dfdc; color: #75817d; box-shadow: none; cursor: not-allowed; opacity: .8; transform: none; }
 .matchSummary { display: flex; gap: 11px; padding: 14px; border: 1px solid #cfe8e2; border-radius: 8px; background: linear-gradient(135deg,#f0faf7,#fbfdfc); }
 .matchSummary > span { color: var(--color-interactive); font-size: 20px; }
 .matchSummary p { margin: 4px 0 0; color: #53615d; font-size: 11px; line-height: 1.5; }
