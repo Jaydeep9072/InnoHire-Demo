@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Candidate, JobOption } from "@/types/domain";
+import type { Candidate, Employee, JobOption } from "@/types/domain";
 import styles from "./candidate-pipeline.module.css";
 
 type ApiData = { configured: boolean; candidates: Candidate[]; jobs: JobOption[]; error?: string };
@@ -22,6 +22,10 @@ export function CandidatePipeline() {
   const [schedule, setSchedule] = useState({ provider: "google", date: "", time: "" });
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleMessage, setScheduleMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeeError, setEmployeeError] = useState<string | null>(null);
+  const [panelistIds, setPanelistIds] = useState<number[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,8 +48,28 @@ export function CandidatePipeline() {
   const selected = data?.candidates.find((candidate) => candidate.job_candidate_id === selectedId) ?? null;
   const stageCounts = useMemo(() => Object.fromEntries(stages.map((stage) => [stage, data?.candidates.filter((candidate) => (candidate.application_status || "APPLIED").toUpperCase() === stage).length || 0])), [data]);
 
+  async function openSchedule() {
+    setScheduleOpen(true); setScheduleMessage(null); setEmployeeError(null); setPanelistIds([]); setEmployeesLoading(true);
+    try {
+      const response = await fetch("/api/employees");
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "The employee list could not be loaded.");
+      setEmployees(payload.employees || []);
+    } catch (error) {
+      setEmployees([]);
+      setEmployeeError(error instanceof Error ? error.message : "The employee list could not be loaded.");
+    } finally { setEmployeesLoading(false); }
+  }
+
+  function togglePanelist(employeeId: number) {
+    setPanelistIds((current) => current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId]);
+    setScheduleMessage(null);
+  }
+
   async function submitInterview() {
     if (!selected?.email_address) { setScheduleMessage({ type: "error", text: "Add the candidate email address before scheduling an interview." }); return; }
+    const panelists = employees.filter((employee) => panelistIds.includes(employee.employee_id) && employee.email_address).map((employee) => ({ employeeId: employee.employee_id, fullName: employee.full_name || employee.employee_code || `Employee ${employee.employee_id}`, emailAddress: employee.email_address as string }));
+    if (!panelists.length) { setScheduleMessage({ type: "error", text: "Select at least one interview panelist." }); return; }
     if (!schedule.date || !schedule.time) { setScheduleMessage({ type: "error", text: "Select both the interview date and time." }); return; }
     setScheduleBusy(true); setScheduleMessage(null);
     try {
@@ -57,11 +81,12 @@ export function CandidatePipeline() {
           candidateEmail: selected.email_address,
           jobTitle: selected.job_title || `Job ${selected.job_posting_id}`,
           startAt: new Date(`${schedule.date}T${schedule.time}`).toISOString(),
+          panelists,
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "The interview could not be scheduled.");
-      setScheduleMessage({ type: "success", text: `Interview invitation sent to ${selected.email_address}.` });
+      setScheduleMessage({ type: "success", text: `Interview invitation sent to ${selected.email_address} and ${panelists.length} panelist${panelists.length === 1 ? "" : "s"}.` });
     } catch (error) { setScheduleMessage({ type: "error", text: error instanceof Error ? error.message : "The interview could not be scheduled." }); }
     finally { setScheduleBusy(false); }
   }
@@ -101,11 +126,11 @@ export function CandidatePipeline() {
 
           <section className={styles.profilePanel}>
             {!selected ? <div className={styles.panelEmpty}><span>◎</span><h2>Select a candidate</h2><p>Candidate profile, match evidence, and experience will appear here.</p></div> : <>
-              <div className={styles.profileHeader}><div className={styles.profileAvatar}>{initials(selected.full_name)}</div><div><span className={styles.statusBadge}>{stageLabels[(selected.application_status || "APPLIED").toUpperCase()] || selected.application_status}</span><h2>{selected.full_name}</h2><p>{selected.headline || selected.current_position || "Candidate profile"}</p></div><div className={styles.scoreRing} style={{ "--score": selected.match_score || 0 } as React.CSSProperties}><div><strong>{selected.match_score ?? "—"}</strong><span>% match</span></div></div></div>
-              <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"}>AI Screening</button><button type="button" className={styles.scheduleButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => { setScheduleOpen(true); setScheduleMessage(null); }}>Schedule an interview</button></div>
+              <div className={styles.profileHeader}><div className={styles.profileAvatar}>{initials(selected.full_name)}</div><div><span className={styles.statusBadge}>{stageLabels[(selected.application_status || "APPLIED").toUpperCase()] || selected.application_status}</span><h2>{selected.full_name}</h2><span className={styles.appliedForLabel}>Applied for</span><p className={styles.profileJobTitle}>{selected.job_title || `Job ${selected.job_posting_id}`}</p></div><div className={styles.scoreRing} style={{ "--score": selected.match_score || 0 } as React.CSSProperties}><div><strong>{selected.match_score ?? "—"}</strong><span>% match</span></div></div></div>
+              <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"}>AI Screening</button><button type="button" className={styles.scheduleButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => void openSchedule()}>Schedule an interview</button></div>
               <section className={styles.matchSummary}><span>✦</span><div><strong>Match summary</strong><p>{selected.match_summary || "A match summary has not been generated for this applicant."}</p></div></section>
               <div className={styles.infoGrid}><div><span>Current position</span><strong>{selected.current_position || "Not provided"}</strong></div><div><span>Current company</span><strong>{selected.current_company || "Not provided"}</strong></div><div><span>Experience</span><strong>{selected.years_of_experience == null ? "Not provided" : `${selected.years_of_experience} years`}</strong></div><div><span>Location</span><strong>{selected.candidate_location || "Not provided"}</strong></div></div>
-              <section className={styles.contactSection}><h3>Contact and application</h3><dl><div><dt>Email</dt><dd>{selected.email_address || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{selected.phone_number || "Not provided"}</dd></div><div><dt>Applied</dt><dd>{selected.applied_at ? new Date(selected.applied_at).toLocaleDateString() : "Not provided"}</dd></div><div><dt>Job</dt><dd>{selected.job_title || `Job ${selected.job_posting_id}`}</dd></div><div><dt>Résumé</dt><dd><a className={styles.resumeLink} href={`/api/candidates/${selected.job_candidate_id}/resume`} target="_blank" rel="noreferrer">View PDF résumé</a></dd></div></dl></section>
+              <section className={styles.contactSection}><h3>Contact and application</h3><dl><div><dt>Email</dt><dd>{selected.email_address || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{selected.phone_number || "Not provided"}</dd></div><div><dt>Job title</dt><dd>{selected.current_position || selected.headline || "Not provided"}</dd></div><div><dt>Applied</dt><dd>{selected.applied_at ? new Date(selected.applied_at).toLocaleDateString() : "Not provided"}</dd></div><div><dt>Résumé</dt><dd><a className={styles.resumeLink} href={`/api/candidates/${selected.job_candidate_id}/resume`} target="_blank" rel="noreferrer">View PDF résumé</a></dd></div></dl></section>
             </>}
           </section>
 
@@ -129,9 +154,12 @@ export function CandidatePipeline() {
           <fieldset className={styles.providerOptions}><legend>Meeting platform</legend>
             {[{ value: "google", label: "Google Meet" }, { value: "teams", label: "Microsoft Teams" }, { value: "zoom", label: "Zoom" }].map((provider) => <label key={provider.value} className={schedule.provider === provider.value ? styles.providerSelected : undefined}><input type="radio" name="provider" value={provider.value} checked={schedule.provider === provider.value} onChange={(event) => setSchedule((current) => ({ ...current, provider: event.target.value }))} /><span>{provider.label}</span></label>)}
           </fieldset>
+          <section className={styles.panelistSection}><div className={styles.panelistHeading}><div><h3>Interview panelists</h3><p>Select one or more active employees.</p></div><span>{panelistIds.length} selected</span></div>
+            {employeesLoading ? <div className={styles.panelistState}>Loading employees…</div> : employeeError ? <div className={styles.panelistError}>{employeeError}</div> : !employees.length ? <div className={styles.panelistState}>No active employees are available.</div> : <div className={styles.panelistList}>{employees.map((employee) => { const checked = panelistIds.includes(employee.employee_id); return <label key={employee.employee_id} className={checked ? styles.panelistSelected : styles.panelistOption}><input type="checkbox" checked={checked} onChange={() => togglePanelist(employee.employee_id)} /><span className={styles.panelistAvatar}>{initials(employee.full_name)}</span><span><strong>{employee.full_name || employee.employee_code || `Employee ${employee.employee_id}`}</strong><small>{[employee.designation, employee.department].filter(Boolean).join(" · ") || employee.email_address}</small></span></label>; })}</div>}
+          </section>
           <div className={styles.scheduleFields}><label><span>Date</span><input type="date" value={schedule.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setSchedule((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Time</span><input type="time" value={schedule.time} onChange={(event) => setSchedule((current) => ({ ...current, time: event.target.value }))} /></label></div>
           {scheduleMessage && <div className={scheduleMessage.type === "success" ? styles.scheduleSuccess : styles.scheduleError}>{scheduleMessage.text}</div>}
-          <footer><button type="button" className={styles.cancelButton} onClick={() => setScheduleOpen(false)}>Cancel</button><button type="button" className={styles.scheduleSubmit} onClick={submitInterview} disabled={scheduleBusy}>{scheduleBusy ? "Creating meeting…" : "Create meeting and send email"}</button></footer>
+          <footer><button type="button" className={styles.cancelButton} onClick={() => setScheduleOpen(false)}>Cancel</button><button type="button" className={styles.scheduleSubmit} onClick={submitInterview} disabled={scheduleBusy || employeesLoading}>{scheduleBusy ? "Creating meeting…" : "Create meeting and send email"}</button></footer>
         </section>
       </div>}
     </div>

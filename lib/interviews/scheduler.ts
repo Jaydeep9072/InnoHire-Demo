@@ -1,7 +1,8 @@
 import nodemailer from "nodemailer";
 
 export type InterviewProvider = "google" | "teams" | "zoom";
-type InterviewRequest = { provider: InterviewProvider; candidateName: string; candidateEmail: string; jobTitle: string; startAt: string };
+type InterviewPanelist = { employeeId: number; fullName: string; emailAddress: string };
+type InterviewRequest = { provider: InterviewProvider; candidateName: string; candidateEmail: string; jobTitle: string; startAt: string; panelists: InterviewPanelist[] };
 
 function required(name: string) {
   const value = process.env[name];
@@ -18,7 +19,7 @@ async function jsonRequest<T>(url: string, init: RequestInit): Promise<T> {
   return payload as T;
 }
 
-async function createGoogleMeet(subject: string, start: Date, end: Date) {
+async function createGoogleMeet(subject: string, start: Date, end: Date, attendeeEmails: string[]) {
   const accessToken = required("GOOGLE_CALENDAR_ACCESS_TOKEN");
   const result = await jsonRequest<{ hangoutLink?: string; conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> } }>(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
@@ -29,6 +30,7 @@ async function createGoogleMeet(subject: string, start: Date, end: Date) {
         summary: subject,
         start: { dateTime: start.toISOString() },
         end: { dateTime: end.toISOString() },
+        attendees: attendeeEmails.map((email) => ({ email })),
         conferenceData: { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } },
       }),
     },
@@ -38,7 +40,7 @@ async function createGoogleMeet(subject: string, start: Date, end: Date) {
   return url;
 }
 
-async function createTeamsMeeting(subject: string, start: Date, end: Date) {
+async function createTeamsMeeting(subject: string, start: Date, end: Date, attendeeEmails: string[]) {
   const accessToken = required("MICROSOFT_GRAPH_ACCESS_TOKEN");
   const result = await jsonRequest<{ onlineMeeting?: { joinUrl?: string }; onlineMeetingUrl?: string }>("https://graph.microsoft.com/v1.0/me/events", {
     method: "POST",
@@ -47,6 +49,7 @@ async function createTeamsMeeting(subject: string, start: Date, end: Date) {
       subject,
       start: { dateTime: start.toISOString().replace(/Z$/, ""), timeZone: "UTC" },
       end: { dateTime: end.toISOString().replace(/Z$/, ""), timeZone: "UTC" },
+      attendees: attendeeEmails.map((address) => ({ emailAddress: { address }, type: "required" })),
       isOnlineMeeting: true,
       onlineMeetingProvider: "teamsForBusiness",
     }),
@@ -84,7 +87,7 @@ async function sendInvitation(input: InterviewRequest, subject: string, meetingU
   });
   const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "full", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(start);
   await transporter.sendMail({
-    from: required("SMTP_FROM"), to: input.candidateEmail, subject,
+    from: required("SMTP_FROM"), to: input.candidateEmail, cc: input.panelists.map((panelist) => panelist.emailAddress), subject,
     text: `Hello ${input.candidateName},\n\nYour interview for ${input.jobTitle} is scheduled for ${when}.\n\nJoin meeting: ${meetingUrl}\n`,
     html: `<p>Hello ${escapeHtml(input.candidateName)},</p><p>Your interview for <strong>${escapeHtml(input.jobTitle)}</strong> is scheduled for ${escapeHtml(when)}.</p><p><a href="${escapeHtml(meetingUrl)}">Join the interview meeting</a></p>`,
   });
@@ -94,11 +97,12 @@ export async function scheduleInterview(input: InterviewRequest) {
   const start = new Date(input.startAt);
   const end = new Date(start.getTime() + 30 * 60 * 1000);
   const subject = `Interview: ${input.jobTitle} — ${input.candidateName}`;
+  const attendeeEmails = [...new Set([input.candidateEmail, ...input.panelists.map((panelist) => panelist.emailAddress)])];
   const meetingUrl = input.provider === "google"
-    ? await createGoogleMeet(subject, start, end)
+    ? await createGoogleMeet(subject, start, end, attendeeEmails)
     : input.provider === "teams"
-      ? await createTeamsMeeting(subject, start, end)
+      ? await createTeamsMeeting(subject, start, end, attendeeEmails)
       : await createZoomMeeting(subject, start);
   await sendInvitation(input, subject, meetingUrl, start);
-  return { meetingUrl, startAt: start.toISOString(), provider: input.provider, emailSent: true };
+  return { meetingUrl, startAt: start.toISOString(), provider: input.provider, emailSent: true, panelistCount: input.panelists.length };
 }

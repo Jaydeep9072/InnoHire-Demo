@@ -6,14 +6,12 @@ import styles from "./job-form.module.css";
 import { RichTextEditor } from "./rich-text-editor";
 
 const steps = ["Job details", "Description", "Requirements", "Review & publish"];
-const jobBoardSelectionEnabled = false;
+const jobBoardSelectionEnabled = true;
 const postingChannels = [
   { name: "LinkedIn", mark: "in" },
-  { name: "Indeed", mark: "i" },
+  { name: "Oracle Recruiting Cloud (ORC)", mark: "ORC" },
   { name: "Naukri", mark: "N" },
-  { name: "Glassdoor", mark: "G" },
-  { name: "Monster", mark: "M" },
-  { name: "ZipRecruiter", mark: "Z" },
+  { name: "Indeed", mark: "i" },
 ];
 const currencies = [
   ["AED", "UAE Dirham"], ["USD", "US Dollar"], ["EUR", "Euro"], ["GBP", "British Pound"], ["INR", "Indian Rupee"],
@@ -58,7 +56,7 @@ export function JobForm() {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadedFile = useRef<File | null>(null);
 
-  const publishingReady = !jobBoardSelectionEnabled || (job.jobBoards.length > 0 && (!job.jobBoards.includes("LinkedIn") || Boolean(job.linkedinCompanyId && job.linkedinLocationId)));
+  const publishingReady = true;
   const stepChecks = [
     Boolean(job.title && job.department && job.seniorityLevel && job.location && job.workplaceType && job.employmentType && Number(job.openingsCount) > 0),
     Boolean(hasEditorContent(job.jobDescription) && hasEditorContent(job.responsibilities)),
@@ -171,21 +169,11 @@ export function JobForm() {
               <article className={styles.reviewCard}><span>Compensation</span><strong>{job.minSalary || job.maxSalary ? `${job.minSalary || "—"} – ${job.maxSalary || "—"} ${job.currency}` : "Not added"}</strong><p>{job.payFrequency ? job.payFrequency.toLowerCase() : "Pay frequency not added"}</p></article>
             </div>
             {jobBoardSelectionEnabled && <><div className={styles.sectionDivider} />
-            <div className={styles.channelHeading}><h2>Choose where to publish</h2></div>
+            <div className={styles.channelHeading}><div><h2>Job board options</h2><p>Select boards to save with this job. External publishing integrations are not enabled.</p></div></div>
             <div className={styles.channelGrid} role="group" aria-label="Job posting channels">
               {postingChannels.map((channel) => { const selected = job.jobBoards.includes(channel.name); return <button key={channel.name} type="button" aria-pressed={selected} onClick={() => toggleChannel(channel.name)} className={selected ? styles.channelSelected : styles.channelOption}><span>{channel.mark}</span><strong>{channel.name}</strong></button>; })}
             </div>
-            {job.jobBoards.length > 0 && <><div className={styles.sectionDivider} /><div className={styles.platformRequirements}>
-              {job.jobBoards.map((channel) => <section className={styles.platformPanel} key={channel}>
-                <div className={styles.integrationHeading}><div><span>{postingChannels.find((item) => item.name === channel)?.mark}</span><h2>{channel} publishing details</h2></div></div>
-                {channel === "LinkedIn" ? <div className={styles.formGrid}>
-                  <Field label="LinkedIn company ID *"><input value={job.linkedinCompanyId} onChange={(event) => update("linkedinCompanyId", event.target.value)} placeholder="Company parameter ID" /></Field>
-                  <Field label="LinkedIn location ID *"><input value={job.linkedinLocationId} onChange={(event) => update("linkedinLocationId", event.target.value)} placeholder="Numeric location parameter ID" /></Field>
-                  <Field label="LinkedIn job title ID"><input value={job.linkedinJobTitleId} onChange={(event) => update("linkedinJobTitleId", event.target.value)} placeholder="Optional title parameter ID" /></Field>
-                  <Field label="External application page"><input value={job.applyUrl || "Generated automatically when saved"} readOnly aria-readonly="true" /></Field>
-                </div> : <div className={styles.noPlatformFields}>No additional fields are required for {channel}.</div>}
-              </section>)}
-            </div></>}</>}
+            </>}
           </>}
 
           <div className={styles.formFooter}><button className={styles.secondaryButton} type="button" onClick={() => save("draft")} disabled={busy !== null}>{busy === "draft" ? "Saving…" : "Save draft"}</button><div className={styles.stepActions}>{activeStep > 0 && <button className={styles.secondaryButton} type="button" onClick={() => setActiveStep(activeStep - 1)}>Back</button>}{activeStep < steps.length - 1 ? <button className={styles.primaryButton} type="button" onClick={() => setActiveStep(activeStep + 1)}>Continue <span>→</span></button> : <button type="button" onClick={() => save("submit")} disabled={busy !== null} className={styles.publishButton}>{busy === "submit" ? "Submitting…" : "Submit job"}</button>}</div></div>

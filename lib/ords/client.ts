@@ -1,4 +1,4 @@
-import type { Candidate, JobInput, JobListItem, JobOption } from "@/types/domain";
+import type { Candidate, Employee, JobInput, JobListItem, JobOption } from "@/types/domain";
 
 const suppliedBaseUrl = "https://geab81ab04d531e-innovagedev.adb.me-dubai-1.oraclecloudapps.com/ords/inn_support_sys/innohire";
 
@@ -156,6 +156,23 @@ export async function listOrdsCandidates(): Promise<Candidate[]> {
 export async function listOrdsJobOptions(): Promise<JobOption[]> {
   const response = await requestOrds<OrdsCollection<{ title?: string | null }>>("/jobs_title_lov");
   return (response.items || []).filter((row) => row.title).map((row, index) => ({ job_posting_id: index + 1, title: row.title || null, posting_status: null }));
+}
+
+export async function listOrdsEmployees(): Promise<Employee[]> {
+  const response = await requestOrds<OrdsCollection<Record<string, unknown>>>("/employees");
+  return (response.items || []).map((row) => ({
+    employee_id: Number(row.employee_id),
+    employee_code: nullableString(row.employee_code),
+    first_name: nullableString(row.first_name),
+    last_name: nullableString(row.last_name),
+    full_name: nullableString(row.full_name),
+    email_address: nullableString(row.email_address),
+    department: nullableString(row.department),
+    designation: nullableString(row.designation),
+    employee_status: nullableString(row.employee_status),
+    work_location: nullableString(row.work_location),
+    years_of_experience: nullableNumber(row.years_of_experience),
+  })).filter((employee) => Number.isInteger(employee.employee_id) && employee.employee_id > 0 && employee.employee_status?.toUpperCase() === "ACTIVE" && employee.email_address);
 }
 
 export function ordsJobToInput(job: OrdsJob): JobInput {

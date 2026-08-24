@@ -58,6 +58,20 @@ export type Candidate = {
 
 export type JobOption = { job_posting_id: number; title: string | null; posting_status: string | null };
 
+export type Employee = {
+  employee_id: number;
+  employee_code: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  email_address: string | null;
+  department: string | null;
+  designation: string | null;
+  employee_status: string | null;
+  work_location: string | null;
+  years_of_experience: number | null;
+};
+
 export type JobListItem = {
   job_posting_id: number;
   external_job_id: string | null;
