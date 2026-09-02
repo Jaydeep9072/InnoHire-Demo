@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { createOrdsJob, listOrdsCandidates, listOrdsJobs, OrdsError, ordsJobToInput } from "@/lib/ords/client";
 import { jobDraftSchema, publishJobSchema } from "@/lib/validation/job";
 import { createJobApplicationUrl } from "@/lib/applications/urls";
+import { createOracleRecruitingRequisition, isOracleRecruitingBoardSelected, OracleRecruitingError } from "@/lib/oracle-recruiting/client";
 
 export const runtime = "nodejs";
 
@@ -12,8 +13,51 @@ function errorResponse(error: unknown) {
     console.error("ORDS job operation failed", { message: error.message, status: error.status, details: error.details });
     return NextResponse.json({ error: "We could not save or retrieve the job information right now. Please try again." }, { status: error.status });
   }
+  if (error instanceof OracleRecruitingError) {
+    console.error("Oracle Recruiting Cloud job operation failed", { message: error.message, status: error.status });
+    return NextResponse.json({ error: error.message }, { status: error.status });
+  }
   console.error("Job operation failed", error);
   return NextResponse.json({ error: "The job could not be saved. Please try again." }, { status: 500 });
+}
+
+async function persistOraclePublishingState(
+  job: Parameters<typeof createOrdsJob>[0],
+  jobId: number,
+  externalJobId: string,
+  publishedAt: string,
+) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const update = await createOrdsJob(
+      { ...job, localJobId: jobId },
+      { externalJobId, postingStatus: "PUBLISHED", publishedAt },
+    );
+    if (update.response_status && update.response_status.toUpperCase() !== "SUCCESS") {
+      throw new OrdsError(update.response_message || "The Oracle requisition was created, but ORDS did not save its publishing status.", 502, update);
+    }
+
+    const savedJob = (await listOrdsJobs(jobId))[0];
+    const idMatches = String(savedJob?.external_job_id || "") === externalJobId;
+    const statusMatches = savedJob?.posting_status?.toUpperCase() === "PUBLISHED";
+    const expectedJobBoards = [...new Set(job.jobBoards.map((board) => board.trim()).filter(Boolean))].join(",");
+    const savedJobBoards = (savedJob?.job_boards || "").split(",").map((board) => board.trim()).filter(Boolean).join(",");
+    const jobBoardsMatch = savedJobBoards === expectedJobBoards;
+    console.info("Oracle requisition ORDS persistence check", {
+      jobId,
+      externalJobId,
+      attempt,
+      responseStatus: update.response_status || null,
+      savedExternalJobId: savedJob?.external_job_id || null,
+      savedPostingStatus: savedJob?.posting_status || null,
+      expectedJobBoards,
+      savedJobBoards: savedJob?.job_boards || null,
+      persisted: idMatches && statusMatches && jobBoardsMatch,
+    });
+    if (idMatches && statusMatches && jobBoardsMatch) return;
+    if (attempt < 2) console.warn("Retrying Oracle requisition ORDS persistence", { jobId, externalJobId });
+  }
+
+  throw new OrdsError(`Oracle requisition ${externalJobId} was created, but ORDS did not persist its external job ID.`, 502);
 }
 
 export async function GET(request: NextRequest) {
@@ -90,7 +134,44 @@ export async function POST(request: NextRequest) {
     const savedJob = (await listOrdsJobs(jobId))[0];
     if (!savedJob || savedJob.apply_url !== applyUrl) console.warn("ORDS did not persist apply_url; the job-based application URL fallback remains active.", { job_posting_id: jobId, apply_url: applyUrl });
 
-    // Unipile LinkedIn draft creation is intentionally paused. The job and apply URL are stored in ORDS only.
+    if (action === "submit" && isOracleRecruitingBoardSelected(job.jobBoards)) {
+      let oracleResult: Awaited<ReturnType<typeof createOracleRecruitingRequisition>> | null = null;
+      try {
+        oracleResult = await createOracleRecruitingRequisition(job);
+        const publishedAt = new Date().toISOString();
+        await persistOraclePublishingState(job, jobId, oracleResult.externalJobId, publishedAt);
+        return NextResponse.json({ ...result, job_posting_id: jobId, external_job_id: oracleResult.externalJobId, posting_status: "PUBLISHED", published_at: publishedAt });
+      } catch (error) {
+        if (error instanceof OrdsError && oracleResult) {
+          console.error("Oracle requisition was created but ORDS persistence failed", {
+            jobId,
+            externalJobId: oracleResult.externalJobId,
+            message: error.message,
+          });
+          return NextResponse.json({
+            error: `Oracle requisition ${oracleResult.externalJobId} was created, but its ID could not be saved in InnoHire. Do not submit the job again.`,
+            jobId,
+            externalJobId: oracleResult.externalJobId,
+            oracleCreated: true,
+          }, { status: 502 });
+        }
+        if (error instanceof OracleRecruitingError) {
+          try {
+            await createOrdsJob(
+              { ...job, localJobId: jobId },
+              { externalJobId: null, postingStatus: "DRAFT", publishError: error.message },
+            );
+          } catch (saveError) {
+            console.error("Could not save the Oracle Recruiting Cloud publish error in ORDS", saveError);
+          }
+          console.error("Oracle Recruiting Cloud job operation failed", { message: error.message, status: error.status });
+          return NextResponse.json({ error: error.message, jobId, savedAsDraft: true }, { status: error.status });
+        }
+        throw error;
+      }
+    }
+
+    // External posting runs only for explicitly selected, connected boards. Other submissions remain ORDS drafts.
     return NextResponse.json(result);
   } catch (error) { return errorResponse(error); }
 }

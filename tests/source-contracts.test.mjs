@@ -24,7 +24,43 @@ test("Unipile credentials stay server-side", async () => {
   assert.doesNotMatch(form, /UNIPILE_API_KEY|x-api-key/);
 });
 
+test("Oracle Recruiting Cloud credentials and payload construction stay server-side", async () => {
+  const [client, form, route] = await Promise.all([
+    readFile(new URL("lib/oracle-recruiting/client.ts", root), "utf8"),
+    readFile(new URL("app/jobs/new/job-form.tsx", root), "utf8"),
+    readFile(new URL("app/api/jobs/route.ts", root), "utf8"),
+  ]);
+  assert.match(client, /process\.env\.ORC_USERNAME/);
+  assert.match(client, /process\.env\.ORC_PASSWORD/);
+  assert.match(client, /ExternalDescriptionHTML:\s*encodeHtml\(input\.jobDescription\)/);
+  assert.match(client, /ExternalRespHTML:\s*encodeHtml\(input\.responsibilities\)/);
+  assert.match(client, /ExternalQualHTML:\s*""/);
+  assert.match(client, /MinimumYearsOfExperience:\s*input\.minimumExperience/);
+  assert.match(client, /NumberOfOpenings:\s*input\.openingsCount/);
+  assert.match(client, /Oracle Recruiting Cloud POST request/);
+  assert.match(client, /Oracle Recruiting Cloud POST response/);
+  assert.match(client, /BASE64 HTML/);
+  assert.match(route, /action === "submit" && isOracleRecruitingBoardSelected\(job\.jobBoards\)/);
+  assert.match(route, /Oracle requisition ORDS persistence check/);
+  assert.match(route, /String\(savedJob\?\.external_job_id \|\| ""\) === externalJobId/);
+  assert.doesNotMatch(form, /ORC_USERNAME|ORC_PASSWORD|authorization:\s*`Basic/);
+});
+
 test("candidate matching excludes protected-characteristic inputs", async () => {
   const scoring = await readFile(new URL("lib/candidate-matching/score.ts", root), "utf8");
   assert.doesNotMatch(scoring, /\bage\b|gender|religion|ethnicity|disability|marital|photo/i);
+});
+
+test("selected job boards use the canonical comma-separated job_boards field", async () => {
+  const [ords, jobsList, jobDetail] = await Promise.all([
+    readFile(new URL("lib/ords/client.ts", root), "utf8"),
+    readFile(new URL("app/jobs/all-jobs.tsx", root), "utf8"),
+    readFile(new URL("app/jobs/[jobId]/page.tsx", root), "utf8"),
+  ]);
+  assert.match(ords, /job_boards:\s*\[\.\.\.new Set\(input\.jobBoards[\s\S]*?\.join\(","\) \|\| null/);
+  assert.doesNotMatch(ords, /^\s+job_board:/m);
+  const channelLine = jobsList.split("\n").find((line) => line.includes('data-label="Channel"'));
+  assert.ok(channelLine);
+  assert.doesNotMatch(channelLine, /external_job_id|LinkedIn/);
+  assert.match(jobDetail, /Detail label="External job ID"/);
 });

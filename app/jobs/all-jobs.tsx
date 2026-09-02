@@ -97,7 +97,7 @@ export function AllJobs() {
                 <td data-label="Job"><Link className={styles.jobLink} href={`/jobs/${job.job_posting_id}`}><strong>{job.title || `Job ${job.job_posting_id}`}</strong><small>{job.department || "No department"} · #{job.job_posting_id}</small></Link></td>
                 <td data-label="Type">{formatLabel(job.employment_type)}<small>{formatLabel(job.workplace_type)}</small></td>
                 <td data-label="Location">{job.location || "—"}</td>
-                <td data-label="Channel">{job.job_boards ? <span className={styles.unpublished}>{job.job_boards}</span> : job.external_job_id ? <span className={styles.linkedinBadge}><b>in</b> LinkedIn</span> : <span className={styles.unpublished}>Not selected</span>}</td>
+                <td data-label="Channel">{job.job_boards ? <span className={styles.unpublished}>{job.job_boards}</span> : <span className={styles.unpublished}>Not selected</span>}</td>
                 <td data-label="Apply URL">{job.apply_url ? <a className={styles.applyUrl} href={job.apply_url} target="_blank" rel="noreferrer" title={job.apply_url}>{job.apply_url}</a> : <span className={styles.unpublished}>Not created</span>}</td>
                 <td data-label="Applicants"><strong>{Number(job.applicant_count || 0)}</strong></td>
                 <td data-label="Status"><span className={`${styles.status} ${styles[statusTone(job.posting_status)]}`}>{formatLabel(job.posting_status) || "Unset"}</span></td>

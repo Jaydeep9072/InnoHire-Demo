@@ -94,8 +94,11 @@ export function JobForm() {
       const response = await fetch("/api/jobs", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify({ action, job: jobForSubmission }) });
       const payload = await response.json();
       if (!response.ok) {
+        const failedJobId = Number(payload.jobId);
+        if (Number.isInteger(failedJobId) && failedJobId > 0) setJob((current) => ({ ...current, localJobId: failedJobId }));
         const firstFieldError = payload.fields ? Object.values(payload.fields).flat().find(Boolean) : null;
-        throw new Error(String(firstFieldError || apiErrorMessage(payload, "The job could not be saved.")));
+        const errorMessage = String(firstFieldError || apiErrorMessage(payload, "The job could not be saved."));
+        throw new Error(payload.savedAsDraft && Number.isInteger(failedJobId) ? `${errorMessage} The job was saved as draft #${failedJobId}.` : errorMessage);
       }
       const savedJobId = Number(payload.job_posting_id ?? payload.jobId);
       if (!Number.isInteger(savedJobId) || savedJobId <= 0) throw new Error("The job was saved, but its ID was not returned.");
@@ -162,14 +165,14 @@ export function JobForm() {
           </>}
 
           {activeStep === 3 && <>
-            <SectionHeading number="04" title="Review and publish" subtitle="Review the job details before submitting them to ORDS." />
+            <SectionHeading number="04" title="Review and publish" subtitle="Review the job details before saving it and publishing to connected boards." />
             <div className={styles.reviewGrid}>
               <article className={styles.reviewCard}><span>Role</span><strong>{job.title || "Job title not added"}</strong><p>{[job.department, job.location, job.workplaceType.replace("_", " ")].filter(Boolean).join(" · ") || "Role details are incomplete"}</p></article>
               <article className={styles.reviewCard}><span>Requirements</span><strong>{job.minimumExperience} years minimum</strong><p>{job.requiredSkills ? `${job.requiredSkills.split(/[,\n]/).filter(Boolean).length} required skills` : "Required skills not added"}</p></article>
               <article className={styles.reviewCard}><span>Compensation</span><strong>{job.minSalary || job.maxSalary ? `${job.minSalary || "—"} – ${job.maxSalary || "—"} ${job.currency}` : "Not added"}</strong><p>{job.payFrequency ? job.payFrequency.toLowerCase() : "Pay frequency not added"}</p></article>
             </div>
             {jobBoardSelectionEnabled && <><div className={styles.sectionDivider} />
-            <div className={styles.channelHeading}><div><h2>Job board options</h2><p>Select boards to save with this job. External publishing integrations are not enabled.</p></div></div>
+            <div className={styles.channelHeading}><div><h2>Job board options</h2><p>Selected connected boards are published when you submit the job. Unconnected boards are saved for reference.</p></div></div>
             <div className={styles.channelGrid} role="group" aria-label="Job posting channels">
               {postingChannels.map((channel) => { const selected = job.jobBoards.includes(channel.name); return <button key={channel.name} type="button" aria-pressed={selected} onClick={() => toggleChannel(channel.name)} className={selected ? styles.channelSelected : styles.channelOption}><span>{channel.mark}</span><strong>{channel.name}</strong></button>; })}
             </div>

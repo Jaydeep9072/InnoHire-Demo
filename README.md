@@ -1,12 +1,12 @@
 # InnoHire
 
-InnoHire is a three-screen recruitment operations application for creating and publishing LinkedIn jobs, ranking applicants against the job description, and reporting on hiring activity.
+InnoHire is a recruitment operations application for creating jobs, publishing selected jobs to Oracle Recruiting Cloud, ranking applicants against the job description, and reporting on hiring activity.
 
 ## Run locally
 
 1. Use Node.js 22.13 or later.
 2. Install dependencies with `npm install`.
-3. Copy `.env.example` to `.env.local` and add the ORDS and Unipile values.
+3. Copy `.env.example` to `.env.local` and add the ORDS, Unipile, and Oracle Recruiting Cloud values used by your environment.
 4. Start the application with `npm run dev`.
 5. Open `http://localhost:3000`.
 
@@ -15,7 +15,7 @@ The application displays configuration and empty states when credentials are abs
 ## Main routes
 
 - `/jobs` — view all saved and published jobs from ORDS.
-- `/jobs/new` — create drafts, extract PDF/DOCX/TXT job descriptions, and publish to LinkedIn through Unipile.
+- `/jobs/new` — create drafts, extract PDF/DOCX/TXT job descriptions, and publish to Oracle Recruiting Cloud when that board is selected.
 - `/candidates` — view actual candidates ranked by an explainable score.
 - `/reports` — view ORDS-derived metrics and export the filtered job report as CSV.
 - `/apply/{token}` — public, job-specific candidate application form used as the external LinkedIn apply URL.
@@ -31,3 +31,7 @@ Candidate-facing forms submit through `/api/applications/{token}`. The server re
 The application reads jobs from `/jobs`, candidates from `/candidate`, and the candidate-page job list from `/jobs_title_lov`. Job and candidate submissions are sent through the corresponding ORDS POST endpoints.
 
 Set `APPLICATION_BASE_URL` to the public deployment origin, for example the production Vercel domain. Job creation generates a unique `/apply/{token}` URL and sends it to ORDS as `apply_url`.
+
+## Oracle Recruiting Cloud integration
+
+Set the server-only `ORC_BASE_URL`, `ORC_REQUISITIONS_PATH`, `ORC_USERNAME`, and `ORC_PASSWORD` environment variables. When **Oracle Recruiting Cloud (ORC)** is selected, **Submit job** first saves the InnoHire job through ORDS and then creates the Oracle requisition. Oracle's returned requisition ID is saved as `external_job_id`; failed Oracle submissions remain recoverable InnoHire drafts.
