@@ -141,6 +141,8 @@ export async function listOrdsCandidates(): Promise<Candidate[]> {
     years_of_experience: nullableNumber(row.years_of_experience),
     application_status: nullableString(row.application_status),
     match_score: nullableNumber(row.match_score),
+    screening_id: nullableNumber(row.screening_id),
+    overall_match_percentage: nullableNumber(row.overall_match_percentage),
     matching_skills: nullableString(row.matching_skills),
     missing_skills: nullableString(row.missing_skills),
     relevant_experience: nullableString(row.relevant_experience),
@@ -254,4 +256,194 @@ export async function getOrdsCandidateResume(candidateId: number) {
   const response = await requestOrds<OrdsCollection<Record<string, unknown>>>(`/candidate?job_candidate_id=${encodeURIComponent(candidateId)}`);
   const row = (response.items || []).find((item) => Number(item.job_candidate_id) === candidateId);
   return row ? nullableString(row.resume_text ?? row.resume_base64) : null;
+}
+
+
+export type OrdsScreeningRecord = {
+  screening_id: number;
+  job_candidate_id: number;
+  job_posting_id: number;
+  account_id: string | null;
+  screening_status: "DRAFT" | "COMPLETED" | "FAILED";
+  questions_json: string;
+  answers_json: string;
+  response_analysis_json: string | null;
+  parameter_scores_json: string | null;
+  question_count?: number;
+  answered_count?: number;
+  completion_percentage?: number;
+  hr_score?: number | null;
+  resume_score?: number | null;
+  job_description_score?: number | null;
+  role_knowledge_score?: number | null;
+  problem_solving_score?: number | null;
+  communication_score?: number | null;
+  evidence_ownership_score?: number | null;
+  collaboration_score?: number | null;
+  motivation_adaptability_score?: number | null;
+  overall_match_percentage: number | null;
+  analysis_confidence_percentage?: number | null;
+  overall_analysis: string | null;
+  strengths_json: string | null;
+  development_areas_json: string | null;
+  risk_flags_json: string | null;
+  ai_model: string | null;
+  started_at?: string | null;
+  submitted_at?: string | null;
+  analysis_started_at?: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  analyzed_at: string | null;
+};
+
+export async function getLatestOrdsScreening(candidateId: number): Promise<OrdsScreeningRecord | null> {
+  const response = await requestOrds<OrdsCollection<Record<string, unknown>>>(`/ai_screening_analysis?job_candidate_id=${encodeURIComponent(candidateId)}`);
+  const rows = (response.items || []).filter((row) => Number(row.job_candidate_id) === candidateId);
+  rows.sort((a, b) => String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || "")));
+  const row = rows[0];
+  if (!row) return null;
+  const status = String(row.screening_status || "DRAFT").toUpperCase();
+  return {
+    screening_id: Number(row.screening_id),
+    job_candidate_id: Number(row.job_candidate_id),
+    job_posting_id: Number(row.job_posting_id),
+    account_id: nullableString(row.account_id),
+    screening_status: status === "COMPLETED" || status === "ANALYZED" ? "COMPLETED" : status === "FAILED" ? "FAILED" : "DRAFT",
+    questions_json: typeof row.questions_json === "string" ? row.questions_json : JSON.stringify(row.questions_json || []),
+    answers_json: typeof row.answers_json === "string" ? row.answers_json : JSON.stringify(row.answers_json || []),
+    response_analysis_json: row.response_analysis_json == null ? null : typeof row.response_analysis_json === "string" ? row.response_analysis_json : JSON.stringify(row.response_analysis_json),
+    parameter_scores_json: row.parameter_scores_json == null ? null : typeof row.parameter_scores_json === "string" ? row.parameter_scores_json : JSON.stringify(row.parameter_scores_json),
+    question_count: nullableNumber(row.question_count) ?? undefined,
+    answered_count: nullableNumber(row.answered_count) ?? undefined,
+    completion_percentage: nullableNumber(row.completion_percentage) ?? undefined,
+    hr_score: nullableNumber(row.hr_score),
+    resume_score: nullableNumber(row.resume_score),
+    job_description_score: nullableNumber(row.job_description_score),
+    role_knowledge_score: nullableNumber(row.role_knowledge_score),
+    problem_solving_score: nullableNumber(row.problem_solving_score),
+    communication_score: nullableNumber(row.communication_score),
+    evidence_ownership_score: nullableNumber(row.evidence_ownership_score),
+    collaboration_score: nullableNumber(row.collaboration_score),
+    motivation_adaptability_score: nullableNumber(row.motivation_adaptability_score),
+    overall_match_percentage: nullableNumber(row.overall_match_percentage),
+    analysis_confidence_percentage: nullableNumber(row.analysis_confidence_percentage),
+    overall_analysis: nullableString(row.overall_analysis),
+    strengths_json: nullableString(row.strengths_json),
+    development_areas_json: nullableString(row.development_areas_json),
+    risk_flags_json: nullableString(row.risk_flags_json),
+    ai_model: nullableString(row.ai_model),
+    started_at: nullableString(row.started_at),
+    submitted_at: nullableString(row.submitted_at),
+    analysis_started_at: nullableString(row.analysis_started_at),
+    created_at: nullableString(row.created_at),
+    updated_at: nullableString(row.updated_at),
+    analyzed_at: nullableString(row.analyzed_at),
+  };
+}
+
+type SaveOrdsScreeningInput = Omit<OrdsScreeningRecord, "screening_id" | "account_id" | "created_at" | "updated_at"> & {
+  screening_id?: number;
+  question_generation_model?: string | null;
+  prompt_version?: string | null;
+};
+
+function scoreBand(score: number | null | undefined) {
+  if (score == null) return "NOT_ASSESSED";
+  if (score >= 85) return "EXCELLENT";
+  if (score >= 70) return "GOOD";
+  if (score >= 50) return "FAIR";
+  return "LOW";
+}
+
+function relevanceBand(score: number | null | undefined) {
+  if (score == null) return "NOT_ASSESSED";
+  if (score >= 75) return "HIGH";
+  if (score >= 50) return "MEDIUM";
+  return "LOW";
+}
+
+export async function saveOrdsScreening(input: SaveOrdsScreeningInput) {
+  const storedQuestions = JSON.parse(input.questions_json) as Array<{ id: string; question: string; category?: string; context?: string }>;
+  const answerRecord = JSON.parse(input.answers_json) as Record<string, string>;
+  const answerAnalyses = input.response_analysis_json ? JSON.parse(input.response_analysis_json) : [];
+  const questionId = (value: string, index: number) => Number(value.match(/\d+$/)?.[0] || index + 1);
+  const questions = storedQuestions.map((item, index) => ({
+    question_id: questionId(item.id, index),
+    question: item.question,
+    category: item.category,
+    context: item.context,
+  }));
+  const answers = storedQuestions.map((item, index) => ({
+    question_id: questionId(item.id, index),
+    answer: answerRecord[item.id] || "",
+  }));
+  const parameterScores = {
+    hr: input.hr_score,
+    resume: input.resume_score,
+    job_description: input.job_description_score,
+    role_knowledge: input.role_knowledge_score,
+    problem_solving: input.problem_solving_score,
+    communication: input.communication_score,
+    evidence_ownership: input.evidence_ownership_score,
+    collaboration: input.collaboration_score,
+    motivation_adaptability: input.motivation_adaptability_score,
+  };
+  const technicalScore = input.role_knowledge_score == null || input.problem_solving_score == null
+    ? null
+    : (input.role_knowledge_score + input.problem_solving_score) / 2;
+  const experienceScore = input.resume_score == null || input.job_description_score == null
+    ? null
+    : (input.resume_score + input.job_description_score) / 2;
+  const actor = process.env.INNOHIRE_CREATED_BY || "ADMIN";
+
+  return requestOrds<Record<string, unknown>>("/ai_screening_analysis", {
+    method: "POST",
+    body: JSON.stringify({
+      job_candidate_id: input.job_candidate_id,
+      job_posting_id: input.job_posting_id,
+      account_id: process.env.UNIPILE_ACCOUNT_ID || null,
+      screening_round: 1,
+      screening_status: input.screening_status,
+      response_mode: "TEXT",
+      question_bank_version: "V1.0",
+      question_count: input.question_count ?? questions.length,
+      answered_count: input.answered_count ?? answers.filter((item) => item.answer.trim()).length,
+      completion_percentage: input.completion_percentage ?? 0,
+      questions_json: questions,
+      answers_json: answers,
+      response_analysis_json: {
+        technical_accuracy: scoreBand(technicalScore),
+        communication: scoreBand(input.communication_score),
+        experience_relevance: relevanceBand(experienceScore),
+        answers: answerAnalyses,
+      },
+      parameter_scores_json: parameterScores,
+      hr_score: input.hr_score,
+      resume_score: input.resume_score,
+      job_description_score: input.job_description_score,
+      role_knowledge_score: input.role_knowledge_score,
+      problem_solving_score: input.problem_solving_score,
+      communication_score: input.communication_score,
+      evidence_ownership_score: input.evidence_ownership_score,
+      collaboration_score: input.collaboration_score,
+      motivation_adaptability_score: input.motivation_adaptability_score,
+      overall_match_percentage: input.overall_match_percentage,
+      analysis_confidence_percentage: input.analysis_confidence_percentage,
+      overall_analysis: input.overall_analysis,
+      strengths_json: input.strengths_json ? JSON.parse(input.strengths_json) : [],
+      development_areas_json: input.development_areas_json ? JSON.parse(input.development_areas_json) : [],
+      risk_flags_json: input.risk_flags_json ? JSON.parse(input.risk_flags_json) : [],
+      analysis_error: null,
+      started_at: input.started_at || new Date().toISOString(),
+      submitted_at: input.submitted_at,
+      analysis_started_at: input.analysis_started_at,
+      analyzed_at: input.analyzed_at,
+      review_status: "PENDING",
+      reviewed_by: null,
+      reviewer_notes: null,
+      reviewed_at: null,
+      created_by: actor,
+      updated_by: actor,
+    }),
+  });
 }

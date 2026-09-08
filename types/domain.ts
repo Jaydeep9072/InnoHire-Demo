@@ -45,6 +45,8 @@ export type Candidate = {
   years_of_experience: number | null;
   application_status: string | null;
   match_score: number | null;
+  screening_id: number | null;
+  overall_match_percentage: number | null;
   matching_skills: string | null;
   missing_skills: string | null;
   relevant_experience: string | null;

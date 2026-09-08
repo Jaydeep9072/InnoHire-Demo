@@ -35,3 +35,18 @@ Set `APPLICATION_BASE_URL` to the public deployment origin, for example the prod
 ## Oracle Recruiting Cloud integration
 
 Set the server-only `ORC_BASE_URL`, `ORC_REQUISITIONS_PATH`, `ORC_USERNAME`, and `ORC_PASSWORD` environment variables. When **Oracle Recruiting Cloud (ORC)** is selected, **Submit job** first saves the InnoHire job through ORDS and then creates the Oracle requisition. Oracle's returned requisition ID is saved as `external_job_id`; failed Oracle submissions remain recoverable InnoHire drafts.
+
+## Interview provider authentication
+
+Google Calendar now exchanges `GOOGLE_CALENDAR_REFRESH_TOKEN` for short-lived access tokens automatically. Complete Google consent once with offline access, then set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN`.
+
+Microsoft Teams now uses the Entra client-credentials flow. Grant the app the Microsoft Graph `Calendars.ReadWrite` application permission with admin consent, then set `MICROSOFT_TENANT_ID`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, and `MICROSOFT_CALENDAR_USER` to the organizer's user ID or UPN.
+
+Zoom continues to use Server-to-Server OAuth. All provider access tokens are acquired at runtime and cached until shortly before expiration; routine access-token copying is not required.
+
+
+## Candidate screening storage
+
+The Screening flow expects a server-side ORDS resource at `/ai_screening_analysis`: GET filters by `job_candidate_id`, and POST inserts or updates a screening record. Keep that resource authenticated because it contains candidate answers and evaluation data.
+
+Screening answer analysis uses six job-relevant parameters: role knowledge and problem solving are weighted at 20% each; communication, evidence and ownership, collaboration, and motivation and adaptability are weighted at 15% each. The server calculates the final screening match percentage from these fixed weights.

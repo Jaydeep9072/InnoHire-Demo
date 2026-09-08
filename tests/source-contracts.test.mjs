@@ -64,3 +64,19 @@ test("selected job boards use the canonical comma-separated job_boards field", a
   assert.doesNotMatch(channelLine, /external_job_id|LinkedIn/);
   assert.match(jobDetail, /Detail label="External job ID"/);
 });
+
+test("Google and Microsoft meeting access tokens are acquired automatically", async () => {
+  const [scheduler, exampleEnvironment] = await Promise.all([
+    readFile(new URL("lib/interviews/scheduler.ts", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+  ]);
+
+  assert.match(scheduler, /oauth2\.googleapis\.com\/token/);
+  assert.match(scheduler, /grant_type: ['"]refresh_token['"]/);
+  assert.match(scheduler, /GOOGLE_CALENDAR_REFRESH_TOKEN/);
+  assert.match(scheduler, /login\.microsoftonline\.com/);
+  assert.match(scheduler, /grant_type: ['"]client_credentials['"]/);
+  assert.match(scheduler, /https:\/\/graph\.microsoft\.com\/\.default/);
+  assert.match(scheduler, /MICROSOFT_CALENDAR_USER/);
+  assert.doesNotMatch(exampleEnvironment, /GOOGLE_CALENDAR_ACCESS_TOKEN|MICROSOFT_GRAPH_ACCESS_TOKEN/);
+});

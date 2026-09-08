@@ -3,6 +3,11 @@ import nodemailer from "nodemailer";
 export type InterviewProvider = "google" | "teams" | "zoom";
 type InterviewPanelist = { employeeId: number; fullName: string; emailAddress: string };
 type InterviewRequest = { provider: InterviewProvider; candidateName: string; candidateEmail: string; jobTitle: string; startAt: string; panelists: InterviewPanelist[] };
+type AccessTokenResponse = { access_token?: string; expires_in?: number };
+type CachedAccessToken = { value: string; expiresAt: number };
+
+let googleTokenCache: CachedAccessToken | null = null;
+let microsoftTokenCache: CachedAccessToken | null = null;
 
 function required(name: string) {
   const value = process.env[name];
@@ -19,8 +24,87 @@ async function jsonRequest<T>(url: string, init: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function cachedToken(cache: CachedAccessToken | null) {
+  return cache && cache.expiresAt > Date.now() + 60_000 ? cache.value : null;
+}
+
+function tokenResult(provider: string, response: AccessTokenResponse) {
+  if (!response.access_token) throw new Error(`${provider} did not return an access token.`);
+  return {
+    value: response.access_token,
+    expiresAt: Date.now() + Math.max(Number(response.expires_in || 3600) - 60, 60) * 1000,
+  };
+}
+
+async function googleCalendarAccessToken() {
+  const cached = cachedToken(googleTokenCache);
+  if (cached) return cached;
+
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
+
+  if (clientId && clientSecret && refreshToken) {
+    const response = await jsonRequest<AccessTokenResponse>('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token'
+      }),
+    });
+
+    googleTokenCache = tokenResult('Google OAuth', response);
+    return googleTokenCache.value;
+  }
+
+  const legacyToken = process.env.GOOGLE_CALENDAR_ACCESS_TOKEN;
+  if (legacyToken) return legacyToken;
+
+  throw new Error(
+    'Google Calendar OAuth is not configured. Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, and GOOGLE_CALENDAR_REFRESH_TOKEN.',
+  );
+}
+
+async function microsoftGraphAccessToken() {
+  const cached = cachedToken(microsoftTokenCache);
+  if (cached) return cached;
+
+  const tenantId = process.env.MICROSOFT_TENANT_ID;
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
+
+  if (tenantId && clientId && clientSecret) {
+    const response = await jsonRequest<AccessTokenResponse>(
+      `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          scope: 'https://graph.microsoft.com/.default',
+          grant_type: 'client_credentials',
+        }),
+      },
+    );
+
+    microsoftTokenCache = tokenResult('Microsoft OAuth', response);
+    return microsoftTokenCache.value;
+  }
+
+  const legacyToken = process.env.MICROSOFT_GRAPH_ACCESS_TOKEN;
+  if (legacyToken) return legacyToken;
+
+  throw new Error(
+    'Microsoft Graph OAuth is not configured. Set MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, and MICROSOFT_CALENDAR_USER.',
+  );
+}
+
 async function createGoogleMeet(subject: string, start: Date, end: Date, attendeeEmails: string[]) {
-  const accessToken = required("GOOGLE_CALENDAR_ACCESS_TOKEN");
+  const accessToken = await googleCalendarAccessToken();
   const result = await jsonRequest<{ hangoutLink?: string; conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> } }>(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
     {
@@ -41,8 +125,16 @@ async function createGoogleMeet(subject: string, start: Date, end: Date, attende
 }
 
 async function createTeamsMeeting(subject: string, start: Date, end: Date, attendeeEmails: string[]) {
-  const accessToken = required("MICROSOFT_GRAPH_ACCESS_TOKEN");
-  const result = await jsonRequest<{ onlineMeeting?: { joinUrl?: string }; onlineMeetingUrl?: string }>("https://graph.microsoft.com/v1.0/me/events", {
+  const accessToken = await microsoftGraphAccessToken();
+  const usesAppOnly = Boolean(
+    process.env.MICROSOFT_TENANT_ID
+      && process.env.MICROSOFT_CLIENT_ID
+      && process.env.MICROSOFT_CLIENT_SECRET,
+  );
+  const eventsUrl = usesAppOnly
+    ? `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(required('MICROSOFT_CALENDAR_USER'))}/events`
+    : 'https://graph.microsoft.com/v1.0/me/events';
+  const result = await jsonRequest<{ onlineMeeting?: { joinUrl?: string }; onlineMeetingUrl?: string }>(eventsUrl, {
     method: "POST",
     headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
     body: JSON.stringify({

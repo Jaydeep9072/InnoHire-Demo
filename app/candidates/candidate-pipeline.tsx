@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Candidate, Employee, JobOption } from "@/types/domain";
+import type { ScreeningSession } from "@/lib/screening/schema";
+import { ScreeningDialog } from "./screening-dialog";
 import styles from "./candidate-pipeline.module.css";
 
 type ApiData = { configured: boolean; candidates: Candidate[]; jobs: JobOption[]; error?: string };
 const stages = ["APPLIED", "SCREENED", "SHORTLISTED", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
-const stageLabels: Record<string, string> = { APPLIED: "Applied", SCREENED: "AI screened", SHORTLISTED: "Shortlisted", INTERVIEW: "Interview", OFFER: "Offer", HIRED: "Hired", REJECTED: "Rejected" };
+const stageLabels: Record<string, string> = { APPLIED: "Applied", SCREENED: "Screened", SHORTLISTED: "Shortlisted", INTERVIEW: "Interview", OFFER: "Offer", HIRED: "Hired", REJECTED: "Rejected" };
 const splitLines = (value: string | null) => (value || "").split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
 const initials = (name: string | null) => (name || "?").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
@@ -26,6 +28,90 @@ export function CandidatePipeline() {
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [employeeError, setEmployeeError] = useState<string | null>(null);
   const [panelistIds, setPanelistIds] = useState<number[]>([]);
+  const [screeningCandidate, setScreeningCandidate] = useState<Candidate | null>(null);
+  const [screeningSessions, setScreeningSessions] = useState<Record<number, ScreeningSession>>({});
+
+  async function openScreening(candidate: Candidate, retry = false) {
+    const id = candidate.job_candidate_id;
+    setScreeningCandidate(candidate);
+    if (screeningSessions[id] && !retry) return;
+    setScreeningSessions((current) => ({ ...current, [id]: { questions: [], answers: {}, loading: true } }));
+    try {
+      if (!retry) {
+        const savedResponse = await fetch(`/api/candidates/${id}/screening`);
+        if (savedResponse.ok) {
+          const saved = await savedResponse.json();
+          setScreeningSessions((current) => ({ ...current, [id]: { ...saved, loading: false } }));
+          return;
+        }
+      }
+      const response = await fetch(`/api/candidates/${id}/screening`, { method: "POST", signal: AbortSignal.timeout(120_000) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Screening questions could not be generated.");
+      setScreeningSessions((current) => ({ ...current, [id]: { questions: payload.questions, answers: {}, loading: false, startedAt: payload.startedAt } }));
+    } catch (error) {
+      setScreeningSessions((current) => ({ ...current, [id]: { questions: [], answers: {}, loading: false, error: error instanceof Error && error.name !== "TimeoutError" ? error.message : "Screening took too long. Please try again." } }));
+    }
+  }
+
+  function updateScreeningAnswer(candidateId: number, questionId: string, value: string) {
+    setScreeningSessions((current) => ({
+      ...current,
+      [candidateId]: {
+        ...current[candidateId],
+        answers: { ...current[candidateId].answers, [questionId]: value },
+        analysis: undefined,
+        message: undefined,
+      },
+    }));
+  }
+
+  async function submitScreening(candidateId: number, analyze: boolean) {
+    const session = screeningSessions[candidateId];
+    if (!session || session.busy) return;
+    setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: analyze ? "analyzing" : "saving", message: undefined } }));
+    try {
+      const response = await fetch(`/api/candidates/${candidateId}/screening`, {
+        method: analyze ? "PATCH" : "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ screeningId: session.screeningId, questions: session.questions, answers: session.answers, startedAt: session.startedAt }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || (analyze ? "Answers could not be analyzed." : "Answers could not be saved."));
+      const completedScore = payload.screeningMatchPercentage ?? payload.analysis?.overallMatchPercentage;
+      if (completedScore != null) {
+        setData((current) => current ? {
+          ...current,
+          candidates: current.candidates.map((candidate) => candidate.job_candidate_id === candidateId ? {
+            ...candidate,
+            screening_id: payload.screeningId ?? candidate.screening_id,
+            overall_match_percentage: completedScore,
+          } : candidate),
+        } : current);
+      }
+      setScreeningSessions((current) => ({
+        ...current,
+        [candidateId]: {
+          ...current[candidateId],
+          screeningId: payload.screeningId || current[candidateId].screeningId,
+          analysis: payload.analysis || current[candidateId].analysis,
+          screeningMatchPercentage: payload.screeningMatchPercentage ?? payload.analysis?.overallMatchPercentage ?? current[candidateId].screeningMatchPercentage,
+          busy: undefined,
+          message: { type: "success", text: payload.message },
+        },
+      }));
+    } catch (error) {
+      setScreeningSessions((current) => ({
+        ...current,
+        [candidateId]: {
+          ...current[candidateId],
+          busy: undefined,
+          message: { type: "error", text: error instanceof Error && error.name !== "TimeoutError" ? error.message : "The request took too long. Please try again." },
+        },
+      }));
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +132,8 @@ export function CandidatePipeline() {
 
   useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
   const selected = data?.candidates.find((candidate) => candidate.job_candidate_id === selectedId) ?? null;
+
+  const screeningScore = selected ? selected.overall_match_percentage ?? screeningSessions[selected.job_candidate_id]?.screeningMatchPercentage ?? screeningSessions[selected.job_candidate_id]?.analysis?.overallMatchPercentage : null;
   const stageCounts = useMemo(() => Object.fromEntries(stages.map((stage) => [stage, data?.candidates.filter((candidate) => (candidate.application_status || "APPLIED").toUpperCase() === stage).length || 0])), [data]);
 
   async function openSchedule() {
@@ -126,8 +214,8 @@ export function CandidatePipeline() {
 
           <section className={styles.profilePanel}>
             {!selected ? <div className={styles.panelEmpty}><span>◎</span><h2>Select a candidate</h2><p>Candidate profile, match evidence, and experience will appear here.</p></div> : <>
-              <div className={styles.profileHeader}><div className={styles.profileAvatar}>{initials(selected.full_name)}</div><div><span className={styles.statusBadge}>{stageLabels[(selected.application_status || "APPLIED").toUpperCase()] || selected.application_status}</span><h2>{selected.full_name}</h2><span className={styles.appliedForLabel}>Applied for</span><p className={styles.profileJobTitle}>{selected.job_title || `Job ${selected.job_posting_id}`}</p></div><div className={styles.scoreRing} style={{ "--score": selected.match_score || 0 } as React.CSSProperties}><div><strong>{selected.match_score ?? "—"}</strong><span>% match</span></div></div></div>
-              <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"}>AI Screening</button><button type="button" className={styles.scheduleButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => void openSchedule()}>Schedule an interview</button></div>
+              <div className={styles.profileHeader}><div className={styles.profileAvatar}>{initials(selected.full_name)}</div><div><span className={styles.statusBadge}>{stageLabels[(selected.application_status || "APPLIED").toUpperCase()] || selected.application_status}</span><h2>{selected.full_name}</h2><span className={styles.appliedForLabel}>Applied for</span><p className={styles.profileJobTitle}>{selected.job_title || `Job ${selected.job_posting_id}`}</p></div><div className={styles.scoreGroup}><div className={styles.scoreRing} style={{ "--score": selected.match_score || 0 } as React.CSSProperties}><div><strong>{selected.match_score == null ? "N/A" : `${selected.match_score}%`}</strong><span>Resume match</span></div></div><div className={`${styles.scoreRing} ${styles.screeningScoreRing}`} style={{ "--score": screeningScore || 0 } as React.CSSProperties}><div><strong>{screeningScore == null ? "N/A" : `${screeningScore}%`}</strong><span>Screening match</span></div></div></div></div>
+              <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => void openScreening(selected)}>{screeningScore != null ? "View screening result" : "Screening"}</button><button type="button" className={styles.scheduleButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => void openSchedule()}>Schedule an interview</button></div>
               <section className={styles.matchSummary}><span>✦</span><div><strong>Match summary</strong><p>{selected.match_summary || "A match summary has not been generated for this applicant."}</p></div></section>
               <div className={styles.infoGrid}><div><span>Current position</span><strong>{selected.current_position || "Not provided"}</strong></div><div><span>Current company</span><strong>{selected.current_company || "Not provided"}</strong></div><div><span>Experience</span><strong>{selected.years_of_experience == null ? "Not provided" : `${selected.years_of_experience} years`}</strong></div><div><span>Location</span><strong>{selected.candidate_location || "Not provided"}</strong></div></div>
               <section className={styles.contactSection}><h3>Contact and application</h3><dl><div><dt>Email</dt><dd>{selected.email_address || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{selected.phone_number || "Not provided"}</dd></div><div><dt>Job title</dt><dd>{selected.current_position || selected.headline || "Not provided"}</dd></div><div><dt>Applied</dt><dd>{selected.applied_at ? new Date(selected.applied_at).toLocaleDateString() : "Not provided"}</dd></div><div><dt>Résumé</dt><dd><a className={styles.resumeLink} href={`/api/candidates/${selected.job_candidate_id}/resume`} target="_blank" rel="noreferrer">View PDF résumé</a></dd></div></dl></section>
@@ -147,6 +235,7 @@ export function CandidatePipeline() {
           </aside>
         </div>
       )}
+      {screeningCandidate && screeningSessions[screeningCandidate.job_candidate_id] && <ScreeningDialog key={screeningCandidate.job_candidate_id} candidate={screeningCandidate} session={screeningSessions[screeningCandidate.job_candidate_id]} onClose={() => setScreeningCandidate(null)} onRetry={() => void openScreening(screeningCandidate, true)} onAnswer={(questionId, value) => updateScreeningAnswer(screeningCandidate.job_candidate_id, questionId, value)} onSave={() => void submitScreening(screeningCandidate.job_candidate_id, false)} onAnalyze={() => void submitScreening(screeningCandidate.job_candidate_id, true)} />}
       {scheduleOpen && selected && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setScheduleOpen(false); }}>
         <section className={styles.scheduleModal} role="dialog" aria-modal="true" aria-labelledby="schedule-title">
           <header><div><p>Candidate interview</p><h2 id="schedule-title">Schedule an interview</h2></div><button type="button" aria-label="Close scheduling dialog" onClick={() => setScheduleOpen(false)}>×</button></header>

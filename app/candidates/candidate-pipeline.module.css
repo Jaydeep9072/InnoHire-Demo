@@ -38,18 +38,21 @@
 .resumeLink { color: var(--color-primary); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
 .chevron { color: var(--color-text-secondary); font-size: 18px; }
 .profilePanel { padding: 18px; }
-.profileHeader { display: grid; grid-template-columns: 54px minmax(0,1fr) 88px; align-items: center; gap: 13px; padding-bottom: 17px; border-bottom: 1px solid var(--color-border); }
+.profileHeader { display: grid; grid-template-columns: 54px minmax(0,1fr) auto; align-items: center; gap: 13px; padding-bottom: 17px; border-bottom: 1px solid var(--color-border); }
 .profileAvatar { width: 54px; height: 54px; font-size: 16px; }
 .profileHeader h2 { margin: 5px 0 2px; font-size: 19px; }
 .appliedForLabel { display: block; margin: 5px 0 1px; color: var(--color-text-secondary); font-size: 9px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .profileHeader .profileJobTitle { margin: 0; color: var(--color-text); font-size: 12px; font-weight: 600; }
 .profilePosition { display: block; margin-top: 3px; color: var(--color-text-secondary); font-size: 11px; }
 .statusBadge, .autoBadge { display: inline-flex; padding: 4px 7px; border-radius: 999px; background: var(--color-mint); color: var(--color-primary); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.scoreRing { width: 82px; height: 82px; display: grid; place-items: center; border-radius: 50%; background: conic-gradient(var(--color-interactive) calc(var(--score) * 1%), #dcebe7 0); }
+.scoreGroup { display: flex; align-items: center; gap: 12px; }
+.scoreRing { --ring-color: var(--color-interactive); width: 82px; height: 82px; display: grid; place-items: center; border-radius: 50%; background: conic-gradient(var(--ring-color) calc(var(--score) * 1%), #dcebe7 0); }
+.screeningScoreRing { --ring-color: #3978b8; }
 .scoreRing::before { content: ""; grid-area: 1/1; width: 66px; height: 66px; border-radius: 50%; background: #fff; }
 .scoreRing div { z-index: 1; grid-area: 1/1; display: flex; flex-direction: column; align-items: center; }
 .scoreRing strong { font-size: 20px; color: var(--color-primary); }
-.scoreRing span { color: var(--color-text-secondary); font-size: 9px; }
+.scoreRing span { max-width: 58px; color: var(--color-text-secondary); font-size: 9px; line-height: 1.2; text-align: center; }
+.screeningScoreRing strong { color: #245f9b; }
 .profileActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
 .profileActions button { min-height: 40px; padding: 9px 10px; border: 1px solid var(--color-primary); border-radius: var(--radius-sm); background: var(--color-primary); color: #fff; text-align: center; font-size: 11px; font-weight: 650; cursor: pointer; }
 .profileActions button:disabled { border-color: #aebbb7; background: #d7dfdc; color: #75817d; box-shadow: none; cursor: not-allowed; opacity: .8; transform: none; }
@@ -100,4 +103,4 @@
 .profileActions button:active:not(:disabled), .scheduleSubmit:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 @keyframes load { to { background-position: -200% 0; } }
 @media (max-width: 1120px) { .operationalGrid { grid-template-columns: minmax(270px,.7fr) 1fr; }.evidenceColumn { grid-column: 1/-1; grid-template-columns: 1fr 300px; }.stageTracker { overflow-x: auto; grid-template-columns: repeat(7,minmax(120px,1fr)); } }
-@media (max-width: 760px) { .page { padding: 22px 14px 36px; }.pageHeader { align-items: stretch; flex-direction: column; }.headerControls { align-items: stretch; flex-direction: column; }.headerControls select { min-width: 0; }.applicantCount { padding: 0; border: 0; }.operationalGrid { grid-template-columns: 1fr; }.evidenceColumn { grid-column: auto; grid-template-columns: 1fr; }.profileHeader { grid-template-columns: 48px 1fr; }.scoreRing { grid-column: 1/-1; justify-self: center; }.profileActions, .scheduleFields { grid-template-columns: 1fr; flex-direction: column; }.providerOptions { grid-template-columns: 1fr; }.scheduleModal > footer { flex-direction: column-reverse; }.scheduleModal > footer button { width: 100%; } }
+@media (max-width: 760px) { .page { padding: 22px 14px 36px; }.pageHeader { align-items: stretch; flex-direction: column; }.headerControls { align-items: stretch; flex-direction: column; }.headerControls select { min-width: 0; }.applicantCount { padding: 0; border: 0; }.operationalGrid { grid-template-columns: 1fr; }.evidenceColumn { grid-column: auto; grid-template-columns: 1fr; }.profileHeader { grid-template-columns: 48px 1fr; }.scoreGroup { grid-column: 1/-1; justify-self: center; }.scoreRing { justify-self: center; }.profileActions, .scheduleFields { grid-template-columns: 1fr; flex-direction: column; }.providerOptions { grid-template-columns: 1fr; }.scheduleModal > footer { flex-direction: column-reverse; }.scheduleModal > footer button { width: 100%; } }
