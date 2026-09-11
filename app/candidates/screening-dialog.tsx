@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type { Candidate } from "@/types/domain";
 import { screeningCategories, type ScreeningSession } from "@/lib/screening/schema";
 import styles from "./screening-dialog.module.css";
@@ -17,9 +17,25 @@ type Props = {
 
 export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer, onSave, onAnalyze }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const recordingInput = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("All questions");
+  const [recordingName, setRecordingName] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const busy = Boolean(session.busy);
 
+  function chooseRecording(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    setRecordingError(null);
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".m4a")) {
+      setRecordingName(null);
+      setRecordingError("Only M4A call recordings can be selected.");
+      event.currentTarget.value = "";
+      return;
+    }
+    setRecordingName(file.name);
+    event.currentTarget.value = "";
+  }
   useEffect(() => {
     const element = dialog.current;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -51,6 +67,19 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
             <p>Answers and analysis are stored as a candidate screening record.</p>
           </div>
 
+          <section className={styles.recordingUpload} aria-labelledby="call-recording-title">
+            <div className={styles.recordingInfo}>
+              <strong id="call-recording-title">Call recording</strong>
+              <span>M4A files only. The recording is not uploaded or saved.</span>
+              {recordingError && <span className={styles.recordingError} role="alert">{recordingError}</span>}
+            </div>
+            <div className={styles.recordingControls}>
+              <button type="button" className={styles.recordingButton} onClick={() => recordingInput.current?.click()} disabled={busy}>Upload call recording</button>
+              <input ref={recordingInput} className={styles.fileInput} type="file" accept=".m4a" onChange={chooseRecording} disabled={busy} tabIndex={-1} />
+              {recordingName && <span className={styles.recordingName} role="status" title={recordingName}>{recordingName}</span>}
+            </div>
+          </section>
+
           {session.message && <div className={session.message.type === "success" ? styles.success : styles.error} role="status">{session.message.text}</div>}
 
           {session.analysis && <section className={styles.results} aria-labelledby="analysis-title">
@@ -68,7 +97,7 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
             </div>
           </section>}
 
-          <p className={styles.help}>Capture specific examples, the candidate’s actions, and the outcome. All 14 answers are required for analysis.</p>
+          <p className={styles.help}>Capture specific examples, the candidate&apos;s actions, and the outcome. All {session.questions.length} answers are required for analysis.</p>
           <div className={styles.filters} role="group" aria-label="Filter screening questions">
             {["All questions", ...screeningCategories].map((category) => <button type="button" key={category} aria-pressed={filter === category} onClick={() => setFilter(category)}>{category} <span>{category === "All questions" ? session.questions.length : session.questions.filter((question) => question.category === category).length}</span></button>)}
           </div>
