@@ -76,7 +76,9 @@ export function proposeSpeakerMapping(segments:TranscriptSegment[],questions:Scr
   return {interviewerSpeakerId:scores[0].speakerId,applicantSpeakerId:scores[1].speakerId,status:"REQUIRES_REVIEW",method:"QUESTION_ALIGNMENT",confidence};
 }
 export type AlignedAnswer={questionId:string;status:RecordingQuestionAssessment["status"];answer:string;evidenceSegmentIds:string[]};
-export function canReuseRecordingAttempt(existing:Pick<RecordingWorkflow,"attemptId"|"stage">|null,attemptId:string){return Boolean(existing&&existing.attemptId===attemptId&&existing.stage!=="FAILED");}
+const reuploadableRecordingStages:RecordingStage[]=["AWAITING_SPEAKER_REVIEW","ANALYSIS_PENDING","COMPLETED","FAILED"];
+export function canReuploadRecording(existing:Pick<RecordingWorkflow,"stage"|"speechLifecycleState">|null){return Boolean(existing&&existing.stage!=="ANALYZING"&&(reuploadableRecordingStages.includes(existing.stage)||existing.speechLifecycleState?.toUpperCase()==="SUCCEEDED"));}
+export function canReuseRecordingAttempt(existing:Pick<RecordingWorkflow,"attemptId"|"stage"|"speechLifecycleState">|null,attemptId:string){return Boolean(existing&&existing.attemptId===attemptId&&!canReuploadRecording(existing));}
 export function ociSpeechFailureMessage(details:string|undefined,state:string){const value=(details||"").trim();if(/FILE_NOT_SUPPORTED|not supported or corrupted/i.test(value))return "OCI Speech could not read this M4A. The file may be corrupted or use an unsupported audio codec or sample rate. Re-export it as M4A with AAC audio at 16 kHz or higher, then reupload it.";if(/sample.?rate/i.test(value))return "OCI Speech rejected the recording sample rate. Re-export it as M4A with AAC audio at 16 kHz or higher, then reupload it.";return value||`OCI Speech job ${state.toLowerCase()}.`;}
 export function assignSpeakerRoles(segments:TranscriptSegment[]):SpeakerMapping{
   const speakerIds=[...new Set(segments.map((item)=>item.speakerId).filter(Boolean))];

@@ -106,7 +106,7 @@ test("screening analysis calculates the weighted match on the server", () => {
   assert.throws(() => validateScreeningAnalysis({ ...analysis, responseAnalyses: analysis.responseAnalyses.slice(1) }, questionIds));
 });
 
-const { normalizeOciTranscript, proposeSpeakerMapping, assignSpeakerRoles, labelSpeakerRoles, alignApplicantAnswers, canReuseRecordingAttempt, ociSpeechFailureMessage } = await loadTypeScript("../lib/screening/recording.ts");
+const { normalizeOciTranscript, proposeSpeakerMapping, assignSpeakerRoles, labelSpeakerRoles, alignApplicantAnswers, canReuploadRecording, canReuseRecordingAttempt, ociSpeechFailureMessage } = await loadTypeScript("../lib/screening/recording.ts");
 
 test("OCI transcript normalization preserves speaker and timestamp evidence", () => {
   const transcript = normalizeOciTranscript({ transcriptions: [{ tokens: [
@@ -138,9 +138,13 @@ test("OCI unsupported M4A failures have an actionable message", () => {
   assert.match(message, /AAC audio at 16 kHz or higher/);
   assert.match(message, /reupload/i);
 });
-test("failed recording attempts can be reuploaded", () => {
+test("completed and failed recording attempts can be reuploaded", () => {
   assert.equal(canReuseRecordingAttempt({ attemptId: "same-file", stage: "TRANSCRIBING" }, "same-file"), true);
   assert.equal(canReuseRecordingAttempt({ attemptId: "same-file", stage: "FAILED" }, "same-file"), false);
+  assert.equal(canReuseRecordingAttempt({ attemptId: "same-file", stage: "COMPLETED" }, "same-file"), false);
+  assert.equal(canReuseRecordingAttempt({ attemptId: "same-file", stage: "ANALYSIS_PENDING", speechLifecycleState: "SUCCEEDED" }, "same-file"), false);
+  assert.equal(canReuploadRecording({ stage: "ANALYSIS_PENDING", speechLifecycleState: "SUCCEEDED" }), true);
+  assert.equal(canReuploadRecording({ stage: "TRANSCRIBING", speechLifecycleState: "IN_PROGRESS" }), false);
 });
 test("OCI speakers are stored as Speaker 1 interviewer and Speaker 2 applicant", () => {
   const segments = [

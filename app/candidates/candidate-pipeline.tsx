@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Candidate, Employee, JobOption } from "@/types/domain";
 import type { ScreeningSession } from "@/lib/screening/schema";
+import { canReuploadRecording } from "@/lib/screening/recording";
 import { ScreeningDialog } from "./screening-dialog";
 import styles from "./candidate-pipeline.module.css";
 
@@ -69,6 +70,8 @@ export function CandidatePipeline() {
   async function uploadScreeningRecording(candidateId: number, file: File) {
     const session = screeningSessions[candidateId];
     if (!session?.screeningId || session.busy) return;
+    const isReupload = canReuploadRecording(session.recording || null);
+    const previousTranscriptAnswerIds = new Set((session.recording?.alignedAnswers || []).filter((item) => item.answer.trim()).map((item) => item.questionId));
     setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: "uploading", message: undefined } }));
     try {
       const form = new FormData();
@@ -77,7 +80,12 @@ export function CandidatePipeline() {
       const response = await fetch(`/api/candidates/${candidateId}/screening/recording`, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "The recording could not be uploaded.");
-      setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: undefined, callRecordingName: file.name, transcriptionJobId: payload.recording?.transcriptionJobId, outputPrefix: payload.recording?.output?.prefix, recording: payload.recording, message: { type: "success", text: "Recording uploaded. OCI Speech transcription is queued." } } }));
+      setData((current) => current ? { ...current, candidates: current.candidates.map((candidate) => candidate.job_candidate_id === candidateId ? { ...candidate, overall_match_percentage: null } : candidate) } : current);
+      setScreeningSessions((current) => {
+        const currentSession = current[candidateId];
+        const answers = Object.fromEntries(Object.entries(currentSession.answers).filter(([questionId]) => !previousTranscriptAnswerIds.has(questionId)));
+        return { ...current, [candidateId]: { ...currentSession, answers, analysis: undefined, screeningMatchPercentage: undefined, busy: undefined, callRecordingName: file.name, transcriptionJobId: payload.recording?.transcriptionJobId, outputPrefix: payload.recording?.output?.prefix, recording: payload.recording, message: { type: "success", text: isReupload ? "Replacement recording uploaded. OCI Speech transcription is queued." : "Recording uploaded. OCI Speech transcription is queued." } } };
+      });
     } catch (error) {
       setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: undefined, message: { type: "error", text: error instanceof Error && error.name !== "TimeoutError" ? error.message : "The upload took too long. Check the screening status before retrying." } } }));
     }

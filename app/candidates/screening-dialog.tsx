@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type { Candidate } from "@/types/domain";
 import { screeningCategories, type ScreeningSession } from "@/lib/screening/schema";
+import { canReuploadRecording } from "@/lib/screening/recording";
 import styles from "./screening-dialog.module.css";
 
 type Props = {
@@ -22,8 +23,9 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
   const [filter, setFilter] = useState("All questions");
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const busy = Boolean(session.busy);
-  const recordingActive = Boolean(session.recording && !["COMPLETED", "FAILED"].includes(session.recording.stage));
-  const recordingFailed = session.recording?.stage === "FAILED";
+  const recordingCanBeReuploaded = canReuploadRecording(session.recording || null);
+  const recordingActive = Boolean(session.recording && !recordingCanBeReuploaded);
+
 
   function chooseRecording(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -75,7 +77,7 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
               {recordingError && <span className={styles.recordingError} role="alert">{recordingError}</span>}
             </div>
             <div className={styles.recordingControls}>
-              <button type="button" className={styles.recordingButton} onClick={() => recordingInput.current?.click()} disabled={busy || recordingActive || !session.screeningId}>{session.busy === "uploading" ? "Uploading..." : recordingFailed ? "Reupload call recording" : "Upload call recording"}</button>
+              <button type="button" className={styles.recordingButton} onClick={() => recordingInput.current?.click()} disabled={busy || recordingActive || !session.screeningId}>{session.busy === "uploading" ? "Uploading..." : recordingCanBeReuploaded ? "Reupload call recording" : "Upload call recording"}</button>
               <input ref={recordingInput} className={styles.fileInput} type="file" accept=".m4a" onChange={chooseRecording} disabled={busy || recordingActive || !session.screeningId} tabIndex={-1} />
               {session.callRecordingName && <span className={styles.recordingName} role="status" title={session.callRecordingName}>{session.callRecordingName}</span>}
             </div>

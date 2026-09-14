@@ -3,7 +3,7 @@ import { analyzeRecordingAnswers } from "@/lib/ai/recording-screening-analysis";
 import { createSpeechJob, getOciScreeningConfig, getSpeechJobState, getTranscriptObjectJson, putRecording, recordingObjectNames, reconcileSpeechJob } from "@/lib/oci/screening-speech";
 import { getLatestOrdsScreening, listOrdsCandidates, listOrdsJobs, listOrdsScreeningRecords, saveOrdsScreening, type OrdsScreeningRecord } from "@/lib/ords/client";
 import { screeningParameters, type ScreeningQuestion } from "@/lib/screening/schema";
-import { alignApplicantAnswers, assignSpeakerRoles, canReuseRecordingAttempt, labelSpeakerRoles, normalizeOciTranscript, ociSpeechFailureMessage, recordingStages, type RecordingWorkflow } from "@/lib/screening/recording";
+import { alignApplicantAnswers, assignSpeakerRoles, canReuploadRecording, canReuseRecordingAttempt, labelSpeakerRoles, normalizeOciTranscript, ociSpeechFailureMessage, recordingStages, type RecordingWorkflow } from "@/lib/screening/recording";
 
 const TERMINAL=new Set(["COMPLETED","FAILED"]);
 const MAX_UPLOAD_BYTES=100*1024*1024;
@@ -44,6 +44,13 @@ function alignedAnswerOverrides(record:OrdsScreeningRecord,workflow:RecordingWor
   const answeredCount=questions.filter((question)=>String(answers[question.id]||"").trim()).length;
   return {answers_json:JSON.stringify(answers),answered_count:answeredCount,completion_percentage:questions.length?Math.round(answeredCount/questions.length*100):0};
 }
+function recordingResetOverrides(record:OrdsScreeningRecord,existing:RecordingWorkflow|null):Partial<OrdsScreeningRecord>{
+  const questions=questionsFromRecord(record),answers=answersFromRecord(record,questions);
+  const transcriptQuestionIds=new Set((existing?.alignedAnswers||[]).filter((item)=>item.answer.trim()).map((item)=>item.questionId));
+  const retainedAnswers=Object.fromEntries(Object.entries(answers).filter(([questionId])=>!transcriptQuestionIds.has(questionId)));
+  const answeredCount=questions.filter((question)=>String(retainedAnswers[question.id]||"").trim()).length;
+  return {screening_status:"DRAFT",answers_json:JSON.stringify(retainedAnswers),answered_count:answeredCount,completion_percentage:questions.length?Math.round(answeredCount/questions.length*100):0,response_analysis_json:null,parameter_scores_json:null,hr_score:null,resume_score:null,job_description_score:null,role_knowledge_score:null,problem_solving_score:null,communication_score:null,evidence_ownership_score:null,collaboration_score:null,motivation_adaptability_score:null,overall_match_percentage:null,analysis_confidence_percentage:null,overall_analysis:null,strengths_json:null,development_areas_json:null,risk_flags_json:null,ai_model:null,analyzed_at:null};
+}
 async function persist(record:OrdsScreeningRecord,workflow:RecordingWorkflow,overrides:Partial<OrdsScreeningRecord>={}){
   const result=await saveOrdsScreening({...record,...overrides,screening_id:record.screening_id,call_recording_name:workflow.fileName,transcription_job_id:workflow.transcriptionJobId||null,output_prefix:workflow.output.prefix,analyzed_call_recording_json:JSON.stringify(workflow)});
   return Number(result.screening_id||result.SCREENING_ID||record.screening_id);
@@ -60,17 +67,18 @@ export async function startRecordingWorkflow(candidateId:number,screeningId:numb
   const bytes=Buffer.from(await file.arrayBuffer());if(!isM4a(bytes))throw new Error("The selected file is not a valid M4A/MP4 audio container.");
   const contentAttemptId=createHash("sha256").update(String(candidateId)).update(":").update(String(screeningId)).update(bytes).digest("hex").slice(0,32);
   const existing=workflowFromRecord(record);if(canReuseRecordingAttempt(existing,contentAttemptId))return existing;
-  const attemptId=existing?.stage==="FAILED"?createHash("sha256").update(contentAttemptId).update(":").update(randomUUID()).digest("hex").slice(0,32):contentAttemptId;
+  const attemptId=canReuploadRecording(existing)?createHash("sha256").update(contentAttemptId).update(":").update(randomUUID()).digest("hex").slice(0,32):contentAttemptId;
   const cfg=getOciScreeningConfig(),names=recordingObjectNames(candidateId,screeningId,file.name,attemptId),now=new Date().toISOString();
   let workflow:RecordingWorkflow={version:1,transcriptParserVersion:2,attemptId:names.attemptId,candidateId,screeningId,stage:"SUBMISSION_PENDING",fileName:file.name,input:{namespaceName:cfg.namespaceName,bucketName:cfg.inputBucketName,objectName:names.inputObjectName},output:{namespaceName:cfg.namespaceName,bucketName:cfg.outputBucketName,prefix:names.outputPrefix},opcRetryToken:randomUUID(),opcRequestId:randomUUID(),displayName:`innohire-${candidateId}-${screeningId}-${names.attemptId}`,retries:{submission:0,polling:0,analysis:0},createdAt:now,updatedAt:now};
-  await persist(record,workflow,{screening_status:"DRAFT"});
+  const resetRecord={...record,...recordingResetOverrides(record,existing)};
+  await persist(resetRecord,workflow);
   try {
     const uploaded=await putRecording(workflow.input.objectName,bytes,workflow.opcRequestId);
     workflow={...workflow,input:{...workflow.input,eTag:uploaded.eTag},updatedAt:new Date().toISOString()};
-    await persist(record,workflow);
+    await persist(resetRecord,workflow);
   } catch(error) {
     workflow={...workflow,stage:"FAILED",updatedAt:new Date().toISOString(),error:{code:"OCI_UPLOAD_FAILED",message:publicError(error),retryable:false,at:new Date().toISOString()}};
-    await persist(record,workflow);
+    await persist(resetRecord,workflow);
     return workflow;
   }
   try {
@@ -79,7 +87,7 @@ export async function startRecordingWorkflow(candidateId:number,screeningId:numb
   } catch(error) {
     workflow={...workflow,stage:"SUBMISSION_UNCERTAIN",retries:{...workflow.retries,submission:1},nextAttemptAt:nextRetry(1),updatedAt:new Date().toISOString(),error:{code:"OCI_SUBMISSION_UNCERTAIN",message:publicError(error),retryable:true,at:new Date().toISOString()}};
   }
-  await persist(record,workflow);return workflow;
+  await persist(resetRecord,workflow);return workflow;
 }
 async function reconcileSubmission(record:OrdsScreeningRecord,workflow:RecordingWorkflow){
   const existing=await reconcileSpeechJob(workflow.displayName,workflow.attemptId);
