@@ -35,7 +35,7 @@ function providerErrorMessage(payload: unknown) {
   const messages = ["message", "detail", "title", "error", "reason", "code", "type"]
     .map((key) => record[key])
     .filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
-  return [...new Set(messages)].join(" — ");
+  return [...new Set(messages)].join(" - ");
 }
 
 async function request(path: string, body: unknown, method: "POST" | "PATCH" = "POST") {

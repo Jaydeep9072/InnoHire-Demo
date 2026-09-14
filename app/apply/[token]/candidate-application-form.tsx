@@ -30,15 +30,15 @@ export function CandidateApplicationForm({ token, jobTitle }: { token: string; j
   async function selectResume(file?: File) {
     setMessage(null);
     if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { setResume(null); setMessage("Upload your résumé as a PDF file."); return; }
-    if (file.size > maximumResumeBytes) { setResume(null); setMessage("The résumé must be 3 MB or smaller."); return; }
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { setResume(null); setMessage("Upload your resume as a PDF file."); return; }
+    if (file.size > maximumResumeBytes) { setResume(null); setMessage("The resume must be 3 MB or smaller."); return; }
     const dataUrl = await readDataUrl(file);
     setResume({ fileName: file.name, base64: dataUrl.slice(dataUrl.indexOf(",") + 1) });
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setMessage(null);
-    if (!resume) { setMessage("Upload your résumé as a PDF file."); return; }
+    if (!resume) { setMessage("Upload your resume as a PDF file."); return; }
     if (!consent) { setMessage("Confirm that the information is accurate before submitting."); return; }
     setBusy(true);
     try {
@@ -53,7 +53,7 @@ export function CandidateApplicationForm({ token, jobTitle }: { token: string; j
     finally { setBusy(false); }
   }
 
-  if (complete) return <section className={styles.applicationCard}><div className={styles.successState}><span>✓</span><p>Application submitted</p><h2>Thank you for applying.</h2><div>Your application for {jobTitle} has been sent to the hiring team.</div></div></section>;
+  if (complete) return <section className={styles.applicationCard}><div className={styles.successState}><span>OK</span><p>Application submitted</p><h2>Thank you for applying.</h2><div>Your application for {jobTitle} has been sent to the hiring team.</div></div></section>;
 
   return <form className={styles.applicationCard} onSubmit={submit}>
     <div className={styles.formHeading}><p>Application form</p><h2>Tell us about yourself</h2><span>Fields marked with * are required.</span></div>
@@ -66,13 +66,13 @@ export function CandidateApplicationForm({ token, jobTitle }: { token: string; j
       <Field label="Current company"><input value={form.currentCompany} onChange={(event) => update("currentCompany", event.target.value)} /></Field>
       <Field label="Current position"><input value={form.currentPosition} onChange={(event) => update("currentPosition", event.target.value)} /></Field>
       <Field label="Years of experience"><input type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={form.yearsOfExperience} onChange={(event) => update("yearsOfExperience", decimalOnly(event.target.value))} /></Field>
-      <Field label="Résumé (PDF) *" full><label className={styles.resumeUpload}><input required type="file" accept="application/pdf,.pdf" onChange={(event) => void selectResume(event.target.files?.[0])} /><span>{resume ? "PDF" : "↑"}</span><div><strong>{resume?.fileName || "Choose your résumé"}</strong><small>PDF only · maximum 3 MB</small></div><b>{resume ? "Replace" : "Browse"}</b></label></Field>
+      <Field label="Resume (PDF) *" full><label className={styles.resumeUpload}><input required type="file" accept="application/pdf,.pdf" onChange={(event) => void selectResume(event.target.files?.[0])} /><span>PDF</span><div><strong>{resume?.fileName || "Choose your resume"}</strong><small>PDF only, maximum 3 MB</small></div><b>{resume ? "Replace" : "Browse"}</b></label></Field>
     </div>
     <label className={styles.consent}><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I confirm that the information provided is accurate and may be used to process this application.</span></label>
     {message && <div role="alert" className={styles.formError}>{message}</div>}
-    <div className={styles.formFooter}><p>Your résumé is securely submitted to the hiring team.</p><button type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit application"}</button></div>
+    <div className={styles.formFooter}><p>Your resume is securely submitted to the hiring team.</p><button type="submit" disabled={busy}>{busy ? "Submitting..." : "Submit application"}</button></div>
   </form>;
 }
 
 function Field({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) { return <label className={full ? styles.fullField : undefined}><span>{label}</span>{children}</label>; }
-function readDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("The résumé could not be read.")); reader.readAsDataURL(file); }); }
+function readDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("The resume could not be read.")); reader.readAsDataURL(file); }); }

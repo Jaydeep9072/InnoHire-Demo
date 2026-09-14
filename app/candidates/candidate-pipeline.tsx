@@ -48,7 +48,7 @@ export function CandidatePipeline() {
       const response = await fetch(`/api/candidates/${id}/screening`, { method: "POST", signal: AbortSignal.timeout(120_000) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Screening questions could not be generated.");
-      setScreeningSessions((current) => ({ ...current, [id]: { questions: payload.questions, answers: {}, loading: false, startedAt: payload.startedAt } }));
+      setScreeningSessions((current) => ({ ...current, [id]: { questions: payload.questions, answers: {}, loading: false, startedAt: payload.startedAt, screeningId: payload.screeningId } }));
     } catch (error) {
       setScreeningSessions((current) => ({ ...current, [id]: { questions: [], answers: {}, loading: false, error: error instanceof Error && error.name !== "TimeoutError" ? error.message : "Screening took too long. Please try again." } }));
     }
@@ -64,6 +64,23 @@ export function CandidatePipeline() {
         message: undefined,
       },
     }));
+  }
+
+  async function uploadScreeningRecording(candidateId: number, file: File) {
+    const session = screeningSessions[candidateId];
+    if (!session?.screeningId || session.busy) return;
+    setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: "uploading", message: undefined } }));
+    try {
+      const form = new FormData();
+      form.set("screeningId", String(session.screeningId));
+      form.set("recording", file);
+      const response = await fetch(`/api/candidates/${candidateId}/screening/recording`, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "The recording could not be uploaded.");
+      setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: undefined, callRecordingName: file.name, transcriptionJobId: payload.recording?.transcriptionJobId, outputPrefix: payload.recording?.output?.prefix, recording: payload.recording, message: { type: "success", text: "Recording uploaded. OCI Speech transcription is queued." } } }));
+    } catch (error) {
+      setScreeningSessions((current) => ({ ...current, [candidateId]: { ...current[candidateId], busy: undefined, message: { type: "error", text: error instanceof Error && error.name !== "TimeoutError" ? error.message : "The upload took too long. Check the screening status before retrying." } } }));
+    }
   }
 
   async function submitScreening(candidateId: number, analyze: boolean) {
@@ -112,6 +129,32 @@ export function CandidatePipeline() {
       }));
     }
   }
+
+  const activeRecordingStage = screeningCandidate ? screeningSessions[screeningCandidate.job_candidate_id]?.recording?.stage : undefined;
+
+  useEffect(() => {
+    if (!screeningCandidate) return;
+    const candidateId = screeningCandidate.job_candidate_id;
+    if (!activeRecordingStage || ["COMPLETED", "FAILED"].includes(activeRecordingStage)) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/candidates/${candidateId}/screening/recording`, { cache: "no-store" });
+        const payload = await response.json();
+        if (!cancelled && response.ok) {
+          setScreeningSessions((current) => {
+            const transcriptAnswers = Object.fromEntries((payload.recording?.alignedAnswers || []).filter((item: { answer?: string }) => item.answer?.trim()).map((item: { questionId: string; answer: string }) => [item.questionId, item.answer]));
+            return { ...current, [candidateId]: { ...current[candidateId], answers: { ...current[candidateId].answers, ...transcriptAnswers }, recording: payload.recording, screeningMatchPercentage: payload.recording?.assessment?.overallMatchPercentage ?? current[candidateId].screeningMatchPercentage } };
+          });
+          const score = payload.recording?.assessment?.overallMatchPercentage;
+          if (score != null) setData((current) => current ? { ...current, candidates: current.candidates.map((candidate) => candidate.job_candidate_id === candidateId ? { ...candidate, overall_match_percentage: score } : candidate) } : current);
+        }
+      } catch { /* The next scheduled poll retries this read. */ }
+    };
+    const timer = window.setInterval(refresh, 8000);
+    void refresh();
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [screeningCandidate, activeRecordingStage]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -206,49 +249,49 @@ export function CandidatePipeline() {
             <div className={styles.candidateList}>
               {loading ? <div className={styles.loadingState}><span /><span /><span /></div> : data?.error ? <div className={styles.inlineError}>{data.error}</div> : !data?.candidates.length ? <div className={styles.emptyList}><strong>No candidates found</strong><p>Applicants will appear after real candidate data is ingested.</p></div> : data.candidates.map((candidate) => (
                 <button type="button" key={candidate.job_candidate_id} className={candidate.job_candidate_id === selectedId ? styles.candidateActive : styles.candidate} onClick={() => setSelectedId(candidate.job_candidate_id)}>
-                  <span className={styles.avatar}>{initials(candidate.full_name)}</span><span className={styles.candidateIdentity}><strong>{candidate.full_name || "Unnamed candidate"}</strong><small>{candidate.headline || candidate.current_position || "Candidate profile"}</small></span><span className={styles.candidateScore}>{candidate.match_score == null ? "—" : `${candidate.match_score}%`}<small>match</small></span><span className={styles.chevron}>›</span>
+                  <span className={styles.avatar}>{initials(candidate.full_name)}</span><span className={styles.candidateIdentity}><strong>{candidate.full_name || "Unnamed candidate"}</strong><small>{candidate.headline || candidate.current_position || "Candidate profile"}</small></span><span className={styles.candidateScore}>{candidate.match_score == null ? "N/A" : `${candidate.match_score}%`}<small>match</small></span>
                 </button>
               ))}
             </div>
           </section>
 
           <section className={styles.profilePanel}>
-            {!selected ? <div className={styles.panelEmpty}><span>◎</span><h2>Select a candidate</h2><p>Candidate profile, match evidence, and experience will appear here.</p></div> : <>
+            {!selected ? <div className={styles.panelEmpty}><span>P</span><h2>Select a candidate</h2><p>Candidate profile, match evidence, and experience will appear here.</p></div> : <>
               <div className={styles.profileHeader}><div className={styles.profileAvatar}>{initials(selected.full_name)}</div><div><span className={styles.statusBadge}>{stageLabels[(selected.application_status || "APPLIED").toUpperCase()] || selected.application_status}</span><h2>{selected.full_name}</h2><span className={styles.appliedForLabel}>Applied for</span><p className={styles.profileJobTitle}>{selected.job_title || `Job ${selected.job_posting_id}`}</p></div><div className={styles.scoreGroup}><div className={styles.scoreRing} style={{ "--score": selected.match_score || 0 } as React.CSSProperties}><div><strong>{selected.match_score == null ? "N/A" : `${selected.match_score}%`}</strong><span>Resume match</span></div></div><div className={`${styles.scoreRing} ${styles.screeningScoreRing}`} style={{ "--score": screeningScore || 0 } as React.CSSProperties}><div><strong>{screeningScore == null ? "N/A" : `${screeningScore}%`}</strong><span>Screening match</span></div></div></div></div>
               <div className={styles.profileActions}><button type="button" className={styles.aiScreeningButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => void openScreening(selected)}>{screeningScore != null ? "View screening result" : "Screening"}</button><button type="button" className={styles.scheduleButton} disabled={(selected.application_status || "").toUpperCase() === "REJECTED"} onClick={() => void openSchedule()}>Schedule an interview</button></div>
-              <section className={styles.matchSummary}><span>✦</span><div><strong>Match summary</strong><p>{selected.match_summary || "A match summary has not been generated for this applicant."}</p></div></section>
+              <section className={styles.matchSummary}><span>S</span><div><strong>Match summary</strong><p>{selected.match_summary || "A match summary has not been generated for this applicant."}</p></div></section>
               <div className={styles.infoGrid}><div><span>Current position</span><strong>{selected.current_position || "Not provided"}</strong></div><div><span>Current company</span><strong>{selected.current_company || "Not provided"}</strong></div><div><span>Experience</span><strong>{selected.years_of_experience == null ? "Not provided" : `${selected.years_of_experience} years`}</strong></div><div><span>Location</span><strong>{selected.candidate_location || "Not provided"}</strong></div></div>
-              <section className={styles.contactSection}><h3>Contact and application</h3><dl><div><dt>Email</dt><dd>{selected.email_address || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{selected.phone_number || "Not provided"}</dd></div><div><dt>Job title</dt><dd>{selected.current_position || selected.headline || "Not provided"}</dd></div><div><dt>Applied</dt><dd>{selected.applied_at ? new Date(selected.applied_at).toLocaleDateString() : "Not provided"}</dd></div><div><dt>Résumé</dt><dd><a className={styles.resumeLink} href={`/api/candidates/${selected.job_candidate_id}/resume`} target="_blank" rel="noreferrer">View PDF résumé</a></dd></div></dl></section>
+              <section className={styles.contactSection}><h3>Contact and application</h3><dl><div><dt>Email</dt><dd>{selected.email_address || "Not provided"}</dd></div><div><dt>Phone</dt><dd>{selected.phone_number || "Not provided"}</dd></div><div><dt>Job title</dt><dd>{selected.current_position || selected.headline || "Not provided"}</dd></div><div><dt>Applied</dt><dd>{selected.applied_at ? new Date(selected.applied_at).toLocaleDateString() : "Not provided"}</dd></div><div><dt>Resume</dt><dd><a className={styles.resumeLink} href={`/api/candidates/${selected.job_candidate_id}/resume`} target="_blank" rel="noreferrer">View PDF resume</a></dd></div></dl></section>
             </>}
           </section>
 
           <aside className={styles.evidenceColumn}>
             <section className={styles.evidencePanel}><div className={styles.panelTitle}><div><h2>Evidence</h2><p>Grounded in candidate data</p></div><span className={styles.autoBadge}>Auto-scored</span></div>
               {!selected ? <div className={styles.smallEmpty}>Select a candidate to review evidence.</div> : <div className={styles.evidenceList}>
-                <div className={styles.evidenceBlock}><div className={styles.evidenceHeading}><span className={styles.successIcon}>✓</span><strong>Matching skills</strong></div>{splitLines(selected.matching_skills).length ? <ul>{splitLines(selected.matching_skills).map((skill) => <li key={skill}>{skill}</li>)}</ul> : <p>No matching skills were recorded.</p>}</div>
+                <div className={styles.evidenceBlock}><div className={styles.evidenceHeading}><span className={styles.successIcon}>Y</span><strong>Matching skills</strong></div>{splitLines(selected.matching_skills).length ? <ul>{splitLines(selected.matching_skills).map((skill) => <li key={skill}>{skill}</li>)}</ul> : <p>No matching skills were recorded.</p>}</div>
                 <div className={styles.evidenceBlock}><div className={styles.evidenceHeading}><span className={styles.warningIcon}>!</span><strong>Missing required skills</strong></div>{splitLines(selected.missing_skills).length ? <ul>{splitLines(selected.missing_skills).map((skill) => <li key={skill}>{skill}</li>)}</ul> : <p>No required skill gaps were recorded.</p>}</div>
                 <div className={styles.evidenceBlock}><div className={styles.evidenceHeading}><span className={styles.neutralIcon}>+</span><strong>Strengths</strong></div>{splitLines(selected.match_strengths).length ? <ul>{splitLines(selected.match_strengths).map((item) => <li key={item}>{item}</li>)}</ul> : <p>No strengths were recorded.</p>}</div>
                 <div className={styles.evidenceBlock}><div className={styles.evidenceHeading}><span className={styles.warningIcon}>!</span><strong>Concerns</strong></div>{splitLines(selected.match_concerns).length ? <ul>{splitLines(selected.match_concerns).map((item) => <li key={item}>{item}</li>)}</ul> : <p>No concerns were recorded.</p>}</div>
               </div>}
             </section>
-            <section className={styles.responsibleAi}><span>i</span><div><strong>Responsible review</strong><p>Scores exclude protected characteristics and should support—not replace—human hiring decisions.</p></div></section>
+            <section className={styles.responsibleAi}><span>i</span><div><strong>Responsible review</strong><p>Scores exclude protected characteristics. Use scores to support human hiring decisions; do not use them as the only decision.</p></div></section>
           </aside>
         </div>
       )}
-      {screeningCandidate && screeningSessions[screeningCandidate.job_candidate_id] && <ScreeningDialog key={screeningCandidate.job_candidate_id} candidate={screeningCandidate} session={screeningSessions[screeningCandidate.job_candidate_id]} onClose={() => setScreeningCandidate(null)} onRetry={() => void openScreening(screeningCandidate, true)} onAnswer={(questionId, value) => updateScreeningAnswer(screeningCandidate.job_candidate_id, questionId, value)} onSave={() => void submitScreening(screeningCandidate.job_candidate_id, false)} onAnalyze={() => void submitScreening(screeningCandidate.job_candidate_id, true)} />}
+      {screeningCandidate && screeningSessions[screeningCandidate.job_candidate_id] && <ScreeningDialog key={screeningCandidate.job_candidate_id} candidate={screeningCandidate} session={screeningSessions[screeningCandidate.job_candidate_id]} onClose={() => setScreeningCandidate(null)} onRetry={() => void openScreening(screeningCandidate, true)} onAnswer={(questionId, value) => updateScreeningAnswer(screeningCandidate.job_candidate_id, questionId, value)} onRecordingSelected={(file) => void uploadScreeningRecording(screeningCandidate.job_candidate_id, file)} onSave={() => void submitScreening(screeningCandidate.job_candidate_id, false)} onAnalyze={() => void submitScreening(screeningCandidate.job_candidate_id, true)} />}
       {scheduleOpen && selected && <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setScheduleOpen(false); }}>
         <section className={styles.scheduleModal} role="dialog" aria-modal="true" aria-labelledby="schedule-title">
-          <header><div><p>Candidate interview</p><h2 id="schedule-title">Schedule an interview</h2></div><button type="button" aria-label="Close scheduling dialog" onClick={() => setScheduleOpen(false)}>×</button></header>
+          <header><div><p>Candidate interview</p><h2 id="schedule-title">Schedule an interview</h2></div><button type="button" aria-label="Close scheduling dialog" onClick={() => setScheduleOpen(false)}>X</button></header>
           <div className={styles.scheduleCandidate}><span className={styles.avatar}>{initials(selected.full_name)}</span><div><strong>{selected.full_name || "Unnamed candidate"}</strong><small>{selected.email_address || "Email address not provided"}</small></div></div>
           <fieldset className={styles.providerOptions}><legend>Meeting platform</legend>
             {[{ value: "google", label: "Google Meet" }, { value: "teams", label: "Microsoft Teams" }, { value: "zoom", label: "Zoom" }].map((provider) => <label key={provider.value} className={schedule.provider === provider.value ? styles.providerSelected : undefined}><input type="radio" name="provider" value={provider.value} checked={schedule.provider === provider.value} onChange={(event) => setSchedule((current) => ({ ...current, provider: event.target.value }))} /><span>{provider.label}</span></label>)}
           </fieldset>
           <section className={styles.panelistSection}><div className={styles.panelistHeading}><div><h3>Interview panelists</h3><p>Select one or more active employees.</p></div><span>{panelistIds.length} selected</span></div>
-            {employeesLoading ? <div className={styles.panelistState}>Loading employees…</div> : employeeError ? <div className={styles.panelistError}>{employeeError}</div> : !employees.length ? <div className={styles.panelistState}>No active employees are available.</div> : <div className={styles.panelistList}>{employees.map((employee) => { const checked = panelistIds.includes(employee.employee_id); return <label key={employee.employee_id} className={checked ? styles.panelistSelected : styles.panelistOption}><input type="checkbox" checked={checked} onChange={() => togglePanelist(employee.employee_id)} /><span className={styles.panelistAvatar}>{initials(employee.full_name)}</span><span><strong>{employee.full_name || employee.employee_code || `Employee ${employee.employee_id}`}</strong><small>{[employee.designation, employee.department].filter(Boolean).join(" · ") || employee.email_address}</small></span></label>; })}</div>}
+            {employeesLoading ? <div className={styles.panelistState}>Loading employees...</div> : employeeError ? <div className={styles.panelistError}>{employeeError}</div> : !employees.length ? <div className={styles.panelistState}>No active employees are available.</div> : <div className={styles.panelistList}>{employees.map((employee) => { const checked = panelistIds.includes(employee.employee_id); return <label key={employee.employee_id} className={checked ? styles.panelistSelected : styles.panelistOption}><input type="checkbox" checked={checked} onChange={() => togglePanelist(employee.employee_id)} /><span className={styles.panelistAvatar}>{initials(employee.full_name)}</span><span><strong>{employee.full_name || employee.employee_code || `Employee ${employee.employee_id}`}</strong><small>{[employee.designation, employee.department].filter(Boolean).join(", ") || employee.email_address}</small></span></label>; })}</div>}
           </section>
           <div className={styles.scheduleFields}><label><span>Date</span><input type="date" value={schedule.date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setSchedule((current) => ({ ...current, date: event.target.value }))} /></label><label><span>Time</span><input type="time" value={schedule.time} onChange={(event) => setSchedule((current) => ({ ...current, time: event.target.value }))} /></label></div>
           {scheduleMessage && <div className={scheduleMessage.type === "success" ? styles.scheduleSuccess : styles.scheduleError}>{scheduleMessage.text}</div>}
-          <footer><button type="button" className={styles.cancelButton} onClick={() => setScheduleOpen(false)}>Cancel</button><button type="button" className={styles.scheduleSubmit} onClick={submitInterview} disabled={scheduleBusy || employeesLoading}>{scheduleBusy ? "Creating meeting…" : "Create meeting and send email"}</button></footer>
+          <footer><button type="button" className={styles.cancelButton} onClick={() => setScheduleOpen(false)}>Cancel</button><button type="button" className={styles.scheduleSubmit} onClick={submitInterview} disabled={scheduleBusy || employeesLoading}>{scheduleBusy ? "Creating meeting..." : "Create meeting and send email"}</button></footer>
         </section>
       </div>}
     </div>

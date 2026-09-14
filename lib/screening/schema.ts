@@ -51,6 +51,10 @@ export const screeningAnalysisSchema = z.object({
 export const screeningSubmissionSchema = z.object({
   questions: z.array(screeningQuestionSchema).min(1).max(20),
   answers: z.record(z.string(), z.string().max(10000)),
+  callRecordingName: z.string().trim().max(500).nullable().optional(),
+  transcriptionJobId: z.string().trim().max(500).nullable().optional(),
+  outputPrefix: z.string().trim().max(1000).nullable().optional(),
+  analyzedCallRecording: z.unknown().nullable().optional(),
 });
 
 export type ScreeningBank = z.infer<typeof screeningBankSchema>;
@@ -63,8 +67,13 @@ export type ScreeningSession = {
   error?: string;
   screeningId?: number;
   screeningMatchPercentage?: number;
+  callRecordingName?: string | null;
+  transcriptionJobId?: string | null;
+  outputPrefix?: string | null;
+  analyzedCallRecording?: unknown;
   analysis?: ScreeningAnalysis;
-  busy?: "saving" | "analyzing";
+  recording?: import("./recording").PublicRecording;
+  busy?: "saving" | "analyzing" | "uploading" | "reviewing";
   message?: { type: "success" | "error"; text: string };
   startedAt?: string;
 };

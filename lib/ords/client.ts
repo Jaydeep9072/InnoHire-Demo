@@ -1,4 +1,5 @@
 import type { Candidate, Employee, JobInput, JobListItem, JobOption } from "@/types/domain";
+import { normalizeStoredScreeningEntries } from "@/lib/screening/ords-payload";
 
 const suppliedBaseUrl = "https://geab81ab04d531e-innovagedev.adb.me-dubai-1.oraclecloudapps.com/ords/inn_support_sys/innohire";
 
@@ -36,9 +37,9 @@ export function getOrdsBaseUrl() {
 function sanitizeForLog(value: unknown, key = ""): unknown {
   const normalizedKey = key.toLowerCase();
   if (/password|secret|api[_-]?key|authorization|access[_-]?token/.test(normalizedKey)) return "[REDACTED]";
-  if (normalizedKey === "resume_text" || normalizedKey === "resumebase64") {
+  if (normalizedKey === "resume_text" || normalizedKey === "resumebase64" || normalizedKey === "answers_json" || normalizedKey === "response_analysis_json" || normalizedKey === "analyzed_call_recording_json") {
     const length = typeof value === "string" ? value.length : 0;
-    return `[REDACTED BASE64 RESUME: ${length} characters]`;
+    return `[REDACTED PRIVATE CONTENT: ${length} characters]`;
   }
   if (Array.isArray(value)) return value.map((item) => sanitizeForLog(item));
   if (value && typeof value === "object") {
@@ -288,6 +289,10 @@ export type OrdsScreeningRecord = {
   development_areas_json: string | null;
   risk_flags_json: string | null;
   ai_model: string | null;
+  call_recording_name: string | null;
+  transcription_job_id: string | null;
+  output_prefix: string | null;
+  analyzed_call_recording_json: string | null;
   started_at?: string | null;
   submitted_at?: string | null;
   analysis_started_at?: string | null;
@@ -332,6 +337,10 @@ export async function getLatestOrdsScreening(candidateId: number): Promise<OrdsS
     development_areas_json: nullableString(row.development_areas_json),
     risk_flags_json: nullableString(row.risk_flags_json),
     ai_model: nullableString(row.ai_model),
+    call_recording_name: nullableString(row.call_recording_name),
+    transcription_job_id: nullableString(row.transcription_job_id),
+    output_prefix: nullableString(row.output_prefix),
+    analyzed_call_recording_json: row.analyzed_call_recording_json == null ? null : typeof row.analyzed_call_recording_json === "string" ? row.analyzed_call_recording_json : JSON.stringify(row.analyzed_call_recording_json),
     started_at: nullableString(row.started_at),
     submitted_at: nullableString(row.submitted_at),
     analysis_started_at: nullableString(row.analysis_started_at),
@@ -339,6 +348,12 @@ export async function getLatestOrdsScreening(candidateId: number): Promise<OrdsS
     updated_at: nullableString(row.updated_at),
     analyzed_at: nullableString(row.analyzed_at),
   };
+}
+
+export async function listOrdsScreeningRecords(): Promise<OrdsScreeningRecord[]> {
+  const response = await requestOrds<OrdsCollection<Record<string, unknown>>>("/ai_screening_analysis?limit=100");
+  const candidateIds = [...new Set((response.items || []).map((row) => Number(row.job_candidate_id)).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  return (await Promise.all(candidateIds.map((id) => getLatestOrdsScreening(id)))).filter((record): record is OrdsScreeningRecord => Boolean(record));
 }
 
 type SaveOrdsScreeningInput = Omit<OrdsScreeningRecord, "screening_id" | "account_id" | "created_at" | "updated_at"> & {
@@ -363,20 +378,8 @@ function relevanceBand(score: number | null | undefined) {
 }
 
 export async function saveOrdsScreening(input: SaveOrdsScreeningInput) {
-  const storedQuestions = JSON.parse(input.questions_json) as Array<{ id: string; question: string; category?: string; context?: string }>;
-  const answerRecord = JSON.parse(input.answers_json) as Record<string, string>;
+  const { questions, answers } = normalizeStoredScreeningEntries(input.questions_json, input.answers_json);
   const answerAnalyses = input.response_analysis_json ? JSON.parse(input.response_analysis_json) : [];
-  const questionId = (value: string, index: number) => Number(value.match(/\d+$/)?.[0] || index + 1);
-  const questions = storedQuestions.map((item, index) => ({
-    question_id: questionId(item.id, index),
-    question: item.question,
-    category: item.category,
-    context: item.context,
-  }));
-  const answers = storedQuestions.map((item, index) => ({
-    question_id: questionId(item.id, index),
-    answer: answerRecord[item.id] || "",
-  }));
   const parameterScores = {
     hr: input.hr_score,
     resume: input.resume_score,
@@ -399,12 +402,13 @@ export async function saveOrdsScreening(input: SaveOrdsScreeningInput) {
   return requestOrds<Record<string, unknown>>("/ai_screening_analysis", {
     method: "POST",
     body: JSON.stringify({
+      screening_id: input.screening_id,
       job_candidate_id: input.job_candidate_id,
       job_posting_id: input.job_posting_id,
       account_id: process.env.UNIPILE_ACCOUNT_ID || null,
       screening_round: 1,
       screening_status: input.screening_status,
-      response_mode: "TEXT",
+      response_mode: input.call_recording_name ? "AUDIO" : "TEXT",
       question_bank_version: "V1.0",
       question_count: input.question_count ?? questions.length,
       answered_count: input.answered_count ?? answers.filter((item) => item.answer.trim()).length,
@@ -433,6 +437,10 @@ export async function saveOrdsScreening(input: SaveOrdsScreeningInput) {
       strengths_json: input.strengths_json ? JSON.parse(input.strengths_json) : [],
       development_areas_json: input.development_areas_json ? JSON.parse(input.development_areas_json) : [],
       risk_flags_json: input.risk_flags_json ? JSON.parse(input.risk_flags_json) : [],
+      call_recording_name: input.call_recording_name,
+      transcription_job_id: input.transcription_job_id,
+      output_prefix: input.output_prefix,
+      analyzed_call_recording_json: input.analyzed_call_recording_json || null,
       analysis_error: null,
       started_at: input.started_at || new Date().toISOString(),
       submitted_at: input.submitted_at,

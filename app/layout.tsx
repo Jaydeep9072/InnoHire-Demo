@@ -8,7 +8,7 @@ const poppins = Poppins({ subsets: ["latin"], variable: "--font-body", weight: [
 
 export const metadata: Metadata = {
   title: {
-    default: "InnoHire — Talent operations",
+    default: "InnoHire - Talent operations",
     template: "%s | InnoHire",
   },
   description: "Create jobs, identify strong candidates, and track hiring outcomes.",

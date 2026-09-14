@@ -18,6 +18,8 @@ import {
   type ScreeningQuestion,
 } from "@/lib/screening/schema";
 import { screeningResume } from "@/lib/screening/resume";
+import { workflowFromRecord } from "@/lib/screening/recording-workflow";
+import { publicRecordingStatus } from "@/lib/screening/recording";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -84,8 +86,10 @@ function parseStored(record: OrdsScreeningRecord) {
       }))
     : rawAnswers as Record<string, string>;
 
+  const analyzedCallRecording = jsonValue(record.analyzed_call_recording_json, null);
+  const recordingWorkflow = workflowFromRecord(record);
   let analysis: ScreeningAnalysis | undefined;
-  if (record.screening_status === "COMPLETED" && record.overall_analysis) {
+  if (record.screening_status === "COMPLETED" && record.overall_analysis && !recordingWorkflow?.assessment) {
     const responsePayload = jsonValue(record.response_analysis_json, {}) as Record<string, unknown>;
     const savedAnalyses = (Array.isArray(responsePayload) ? responsePayload : Array.isArray(responsePayload.answers) ? responsePayload.answers : []) as Array<Record<string, unknown>>;
     const parameterPayload = jsonValue(record.parameter_scores_json, {}) as Record<string, unknown>;
@@ -120,7 +124,18 @@ function parseStored(record: OrdsScreeningRecord) {
       overallMatchPercentage: Number(record.overall_match_percentage || 0),
     };
   }
-  return { screeningId: record.screening_id, questions, answers, analysis, startedAt: record.started_at || record.created_at || undefined };
+  return {
+    screeningId: record.screening_id,
+    questions,
+    answers,
+    analysis,
+    callRecordingName: record.call_recording_name,
+    transcriptionJobId: record.transcription_job_id,
+    outputPrefix: record.output_prefix,
+    analyzedCallRecording,
+    recording: publicRecordingStatus(recordingWorkflow),
+    startedAt: record.started_at || record.created_at || undefined,
+  };
 }
 
 function submission(value: unknown) {
@@ -132,8 +147,13 @@ function submission(value: unknown) {
 function storagePayload(input: {
   candidateId: number;
   jobId: number;
+  screeningId?: number;
   questions: ScreeningQuestion[];
   answers: Record<string, string>;
+  callRecordingName?: string | null;
+  transcriptionJobId?: string | null;
+  outputPrefix?: string | null;
+  analyzedCallRecording?: unknown;
   startedAt?: string;
   analysis?: ScreeningAnalysis;
   analysisStartedAt?: string;
@@ -151,6 +171,7 @@ function storagePayload(input: {
   const parameterScore = (parameter: ScreeningAnalysis["parameterScores"][number]["parameter"]) =>
     input.analysis?.parameterScores.find((item) => item.parameter === parameter)?.score ?? null;
   return {
+    screening_id: input.screeningId,
     job_candidate_id: input.candidateId,
     job_posting_id: input.jobId,
     screening_status: input.analysis ? "COMPLETED" as const : "DRAFT" as const,
@@ -176,6 +197,10 @@ function storagePayload(input: {
     strengths_json: input.analysis ? JSON.stringify(input.analysis.strengths) : null,
     development_areas_json: input.analysis ? JSON.stringify(input.analysis.developmentAreas) : null,
     risk_flags_json: input.analysis ? JSON.stringify(input.analysis.riskFlags) : null,
+    call_recording_name: input.callRecordingName ?? null,
+    transcription_job_id: input.transcriptionJobId ?? null,
+    output_prefix: input.outputPrefix ?? null,
+    analyzed_call_recording_json: input.analyzedCallRecording == null ? null : JSON.stringify(input.analyzedCallRecording),
     ai_model: input.analysis ? process.env.GEMINI_MODEL || "gemini-2.5-flash" : null,
     question_generation_model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     prompt_version: "V1.0",
@@ -216,10 +241,11 @@ export async function POST(_: Request, { params }: { params: Promise<{ candidate
     try { resume = screeningResume((await getOrdsCandidateResume(candidateId)) || ""); }
     catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "The resume could not be read." }, { status: 422, headers }); }
     const bank = await generateScreeningQuestions({ ...context, resume });
-    return NextResponse.json({
-      questions: bank.questions.map((question, index) => ({ ...question, id: `question-${index + 1}` })),
-      startedAt: new Date().toISOString(),
-    }, { headers });
+    const questions = bank.questions.map((question, index) => ({ ...question, id: `question-${index + 1}` }));
+    const startedAt = new Date().toISOString();
+    const saved = await saveOrdsScreening(storagePayload({ candidateId, jobId: context.job.job_posting_id, questions, answers: {}, startedAt }));
+    const screeningId = Number(saved.screening_id || saved.SCREENING_ID || 0) || (await getLatestOrdsScreening(candidateId))?.screening_id;
+    return NextResponse.json({ questions, startedAt, screeningId }, { headers });
   } catch (error) {
     return responseError(error, "Screening questions could not be generated right now. Please try again.");
   }
@@ -233,11 +259,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ cand
     if (!context) return NextResponse.json({ error: "Candidate or job not found." }, { status: 404, headers });
     const raw = await request.json() as Record<string, unknown>;
     const data = submission(raw);
+    const currentRecording = await getLatestOrdsScreening(candidateId);
     const result = await saveOrdsScreening(storagePayload({
       candidateId,
       jobId: context.job.job_posting_id,
+      screeningId: Number(raw.screeningId) || undefined,
       startedAt: typeof raw.startedAt === "string" ? raw.startedAt : undefined,
       ...data,
+      callRecordingName: currentRecording?.call_recording_name ?? data.callRecordingName,
+      transcriptionJobId: currentRecording?.transcription_job_id ?? data.transcriptionJobId,
+      outputPrefix: currentRecording?.output_prefix ?? data.outputPrefix,
+      analyzedCallRecording: currentRecording ? jsonValue(currentRecording.analyzed_call_recording_json, null) : data.analyzedCallRecording,
     }));
     return NextResponse.json({ screeningId: Number(result.screening_id || result.SCREENING_ID || 0) || undefined, message: "Screening answers saved." }, { headers });
   } catch (error) {
@@ -253,8 +285,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ca
     if (!context) return NextResponse.json({ error: "Candidate or job not found." }, { status: 404, headers });
     const raw = await request.json() as Record<string, unknown>;
     const data = submission(raw);
-    const unanswered = data.questions.filter(({ id }) => !data.answers[id]?.trim());
-    if (unanswered.length) return NextResponse.json({ error: `Answer all ${data.questions.length} questions before analysis. ${unanswered.length} answer${unanswered.length === 1 ? " is" : "s are"} missing.` }, { status: 422, headers });
+    const currentRecording = await getLatestOrdsScreening(candidateId);
+
     const startedAt = typeof raw.startedAt === "string" ? raw.startedAt : new Date().toISOString();
     const analysisStartedAt = new Date().toISOString();
     const analysis = await analyzeScreeningAnswers({ ...context, ...data });
@@ -262,7 +294,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ca
     const result = await saveOrdsScreening(storagePayload({
       candidateId,
       jobId: context.job.job_posting_id,
+      screeningId: Number(raw.screeningId) || undefined,
       ...data,
+      callRecordingName: currentRecording?.call_recording_name ?? data.callRecordingName,
+      transcriptionJobId: currentRecording?.transcription_job_id ?? data.transcriptionJobId,
+      outputPrefix: currentRecording?.output_prefix ?? data.outputPrefix,
+      analyzedCallRecording: currentRecording ? jsonValue(currentRecording.analyzed_call_recording_json, null) : data.analyzedCallRecording,
       startedAt,
       analysis,
       analysisStartedAt,

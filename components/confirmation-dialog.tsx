@@ -14,7 +14,7 @@ type ConfirmationDialogProps = {
   onConfirm: () => void;
 };
 
-export function ConfirmationDialog({ open, title, description, confirmLabel, busyLabel = "Working…", busy = false, onCancel, onConfirm }: ConfirmationDialogProps) {
+export function ConfirmationDialog({ open, title, description, confirmLabel, busyLabel = "Working...", busy = false, onCancel, onConfirm }: ConfirmationDialogProps) {
   const cancelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;

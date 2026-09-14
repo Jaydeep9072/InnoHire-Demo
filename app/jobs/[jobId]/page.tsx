@@ -47,7 +47,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ jobI
   </div>;
 }
 
-function Detail({ label: detailLabel, value }: { label: string; value: string | null | undefined }) { return <div><dt>{detailLabel}</dt><dd>{value || "—"}</dd></div>; }
+function Detail({ label: detailLabel, value }: { label: string; value: string | null | undefined }) { return <div><dt>{detailLabel}</dt><dd>{value || " - "}</dd></div>; }
 function label(value: string | null | undefined) { return value ? value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : ""; }
 function formatDate(value: string | null) { if (!value) return null; const date = new Date(value); return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" }); }
 function formatMoney(value: number | null, currency: string | null) { if (value == null) return null; return currency ? new Intl.NumberFormat("en", { style: "currency", currency, maximumFractionDigits: 0 }).format(value) : new Intl.NumberFormat("en").format(value); }

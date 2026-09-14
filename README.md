@@ -14,17 +14,17 @@ The application displays configuration and empty states when credentials are abs
 
 ## Main routes
 
-- `/jobs` — view all saved and published jobs from ORDS.
-- `/jobs/new` — create drafts, extract PDF/DOCX/TXT job descriptions, and publish to Oracle Recruiting Cloud when that board is selected.
-- `/candidates` — view actual candidates ranked by an explainable score.
-- `/reports` — view ORDS-derived metrics and export the filtered job report as CSV.
-- `/apply/{token}` — public, job-specific candidate application form used as the external LinkedIn apply URL.
+- `/jobs` - view all saved and published jobs from ORDS.
+- `/jobs/new` - create drafts, extract PDF/DOCX/TXT job descriptions, and publish to Oracle Recruiting Cloud when that board is selected.
+- `/candidates` - view actual candidates ranked by an explainable score.
+- `/reports` - view ORDS-derived metrics and export the filtered job report as CSV.
+- `/apply/{token}` - public, job-specific candidate application form used as the external LinkedIn apply URL.
 
 ## Candidate ingestion
 
 Send validated applicant data to `POST /api/candidates` with the `x-ingestion-secret` header. Its value must match `CANDIDATE_INGESTION_SECRET`. An existing `externalApplicationId` for the same job is updated at the application layer.
 
-Candidate-facing forms submit through `/api/applications/{token}`. The server resolves the job from its stored `apply_url` and calls ORDS without exposing the ingestion secret. Résumés are accepted as PDF files up to 3 MB, stored as base64 in the candidate `resume_text` CLOB, and decoded by `/api/candidates/{candidateId}/resume` when HR opens the résumé.
+Candidate-facing forms submit through `/api/applications/{token}`. The server resolves the job from its stored `apply_url` and calls ORDS without exposing the ingestion secret. Resumes are accepted as PDF files up to 3 MB, stored as base64 in the candidate `resume_text` CLOB, and decoded by `/api/candidates/{candidateId}/resume` when HR opens the resume.
 
 ## ORDS integration
 
@@ -50,3 +50,27 @@ Zoom continues to use Server-to-Server OAuth. All provider access tokens are acq
 The Screening flow expects a server-side ORDS resource at `/ai_screening_analysis`: GET filters by `job_candidate_id`, and POST inserts or updates a screening record. Keep that resource authenticated because it contains candidate answers and evaluation data.
 
 Screening answer analysis uses six job-relevant parameters: role knowledge and problem solving are weighted at 20% each; communication, evidence and ownership, collaboration, and motivation and adaptability are weighted at 15% each. The server calculates the final screening match percentage from these fixed weights.
+
+
+## OCI call-recording screening
+
+The screening dialog accepts only M4A files up to 100 MB. The server validates the file extension and ISO Base Media File Format signature, uploads the bytes directly to the private OCI input bucket, and creates one asynchronous OCI Speech job for that exact object. Each job requests JSON and SRT output with two-speaker diarization and writes to a compact attempt-specific prefix such as so/{screeningId}/{attempt}/ in the private output bucket.
+
+The existing `ih_job_screening_analysis` record is the durable queue. `call_recording_name`, `transcription_job_id`, and `output_prefix` store searchable OCI metadata. `analyzed_call_recording_json` stores the versioned workflow state, retry token, attempts, lease, exact input/output keys, normalized transcript segments, speaker mapping, evidence references, and final assessment. The audio bytes are never stored in the application database or local filesystem.
+
+Run [db/ih_job_screening_analysis.sql](db/ih_job_screening_analysis.sql) when creating the table. The ORDS `POST /ai_screening_analysis` handler must upsert when `screening_id` is supplied and return that ID. Its GET handler must support `job_candidate_id` filtering and a bounded `limit` query.
+
+Set the OCI variables in `.env.example`. For local development, `OCI_AUTH_METHOD=config` uses an OCI SDK config profile. On OCI compute use `instance_principal`; on OCI Functions or another supported workload use `resource_principal`. Keep both Object Storage buckets private and apply retention rules appropriate for candidate data.
+
+The repository includes a Vercel cron that calls `GET /api/screening-recordings/worker` every minute. Set `CRON_SECRET`; Vercel sends it as a Bearer token. On another platform, schedule the same endpoint with `Authorization: Bearer <OCI_WORKER_SECRET>`. Each invocation claims a short persisted lease and performs bounded work. UI polling only reads durable status and is not responsible for completing the job.
+
+Grant the application principal only the compartment access it needs. Oracle documents the aggregate policies below; replace the subject and compartment placeholders with your deployment values:
+
+```text
+Allow dynamic-group <innohire-workers> to manage ai-service-speech-family in compartment <speech-compartment>
+Allow dynamic-group <innohire-workers> to manage object-family in compartment <speech-compartment>
+```
+
+For a user-based local profile, replace `dynamic-group <innohire-workers>` with `group <speech-users>`. Bucket-specific IAM conditions can narrow Object Storage access further.
+
+After Speech finishes, the worker selects the task whose input metadata contains the persisted input object key, then downloads the single JSON key reported by that task. It never scans for a globally newest object. The first diarized speaker is stored as Speaker 1 and INTERVIEWER; the second is stored as Speaker 2 and APPLICANT. The worker aligns only applicant responses to the saved questions, runs the agreed six-parameter analysis, and stores the labeled transcript, aligned answers, evidence, parameter scores, and final assessment in analyzed_call_recording_json. Missing or unasked responses remain unscored; the match percentage is normalized across assessed rubric weights and is withheld when rubric coverage is below 50 percent.

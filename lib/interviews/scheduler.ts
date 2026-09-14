@@ -188,7 +188,7 @@ async function sendInvitation(input: InterviewRequest, subject: string, meetingU
 export async function scheduleInterview(input: InterviewRequest) {
   const start = new Date(input.startAt);
   const end = new Date(start.getTime() + 30 * 60 * 1000);
-  const subject = `Interview: ${input.jobTitle} — ${input.candidateName}`;
+  const subject = `Interview: ${input.jobTitle} - ${input.candidateName}`;
   const attendeeEmails = [...new Set([input.candidateEmail, ...input.panelists.map((panelist) => panelist.emailAddress)])];
   const meetingUrl = input.provider === "google"
     ? await createGoogleMeet(subject, start, end, attendeeEmails)

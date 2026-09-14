@@ -84,9 +84,9 @@ export function AllJobs() {
 
         <section className={styles.jobsPanel}>
           <div className={styles.panelHeader}>
-            <div><h2>Job listings</h2><p>{loading ? "Loading jobs…" : `${filtered.length} of ${jobs.length} jobs`}</p></div>
+            <div><h2>Job listings</h2><p>{loading ? "Loading jobs..." : `${filtered.length} of ${jobs.length} jobs`}</p></div>
             <div className={styles.filters}>
-              <label><span className={styles.searchIcon}>⌕</span><input aria-label="Search jobs" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title, department or location" /></label>
+              <label><span className={styles.searchIcon}>S</span><input aria-label="Search jobs" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title, department or location" /></label>
               <select aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option><option value="DRAFT">Draft</option><option value="PUBLISHING">Publishing</option><option value="READY_TO_PUBLISH">Ready to publish</option><option value="PUBLISHED">Published</option><option value="CLOSED">Closed</option><option value="PUBLISH_FAILED">Publish failed</option></select>
             </div>
           </div>
@@ -94,27 +94,27 @@ export function AllJobs() {
           <div className={styles.tableWrap}>
             <table><thead><tr><th>Job</th><th>Type</th><th>Location</th><th>Channel</th><th>Apply URL</th><th>Applicants</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
               <tbody>{filtered.map((job) => <tr key={job.job_posting_id}>
-                <td data-label="Job"><Link className={styles.jobLink} href={`/jobs/${job.job_posting_id}`}><strong>{job.title || `Job ${job.job_posting_id}`}</strong><small>{job.department || "No department"} · #{job.job_posting_id}</small></Link></td>
+                <td data-label="Job"><Link className={styles.jobLink} href={`/jobs/${job.job_posting_id}`}><strong>{job.title || `Job ${job.job_posting_id}`}</strong><small>{job.department || "No department"}, job #{job.job_posting_id}</small></Link></td>
                 <td data-label="Type">{formatLabel(job.employment_type)}<small>{formatLabel(job.workplace_type)}</small></td>
-                <td data-label="Location">{job.location || "—"}</td>
+                <td data-label="Location">{job.location || "Not provided"}</td>
                 <td data-label="Channel">{job.job_boards ? <span className={styles.unpublished}>{job.job_boards}</span> : <span className={styles.unpublished}>Not selected</span>}</td>
                 <td data-label="Apply URL">{job.apply_url ? <a className={styles.applyUrl} href={job.apply_url} target="_blank" rel="noreferrer" title={job.apply_url}>{job.apply_url}</a> : <span className={styles.unpublished}>Not created</span>}</td>
                 <td data-label="Applicants"><strong>{Number(job.applicant_count || 0)}</strong></td>
                 <td data-label="Status"><span className={`${styles.status} ${styles[statusTone(job.posting_status)]}`}>{formatLabel(job.posting_status) || "Unset"}</span></td>
                 <td data-label="Created">{formatDate(job.created_at)}</td>
-                <td data-label="Actions"><div className={styles.rowActions}><Link href={`/jobs/${job.job_posting_id}`}>View</Link>{job.posting_status === "DRAFT" && <button type="button" onClick={() => publish(job.job_posting_id)} disabled={publishingId === job.job_posting_id || !job.external_job_id || !job.apply_url} title={!job.apply_url ? "Create the candidate application page before publishing" : job.external_job_id ? "Publish this LinkedIn draft" : "Create the LinkedIn draft before publishing"}>{publishingId === job.job_posting_id ? "Publishing…" : "Publish"}</button>}{job.posting_status === "PUBLISHED" && <button type="button" className={styles.closeButton} onClick={() => setCloseTarget({ id: job.job_posting_id, title: job.title || `Job #${job.job_posting_id}` })} disabled={closingId === job.job_posting_id}>{closingId === job.job_posting_id ? "Closing…" : "Close job"}</button>}</div></td>
+                <td data-label="Actions"><div className={styles.rowActions}><Link href={`/jobs/${job.job_posting_id}`}>View</Link>{job.posting_status === "DRAFT" && <button type="button" onClick={() => publish(job.job_posting_id)} disabled={publishingId === job.job_posting_id || !job.external_job_id || !job.apply_url} title={!job.apply_url ? "Create the candidate application page before publishing" : job.external_job_id ? "Publish this LinkedIn draft" : "Create the LinkedIn draft before publishing"}>{publishingId === job.job_posting_id ? "Publishing..." : "Publish"}</button>}{job.posting_status === "PUBLISHED" && <button type="button" className={styles.closeButton} onClick={() => setCloseTarget({ id: job.job_posting_id, title: job.title || `Job #${job.job_posting_id}` })} disabled={closingId === job.job_posting_id}>{closingId === job.job_posting_id ? "Closing..." : "Close job"}</button>}</div></td>
               </tr>)}</tbody>
             </table>
-            {!loading && !filtered.length && <div className={styles.emptyState}><span>▤</span><h2>{jobs.length ? "No jobs match these filters" : "No jobs have been created"}</h2><p>{jobs.length ? "Change the search or status filter to see more jobs." : "Create your first role and save it as a draft or publish it to LinkedIn."}</p>{!jobs.length && <Link href="/jobs/new">Post your first job</Link>}</div>}
+            {!loading && !filtered.length && <div className={styles.emptyState}><span>J</span><h2>{jobs.length ? "No jobs match these filters" : "No jobs have been created"}</h2><p>{jobs.length ? "Change the search or status filter to see more jobs." : "Create your first role and save it as a draft or publish it to LinkedIn."}</p>{!jobs.length && <Link href="/jobs/new">Post your first job</Link>}</div>}
           </div>
         </section>
       </>}
-      <ConfirmationDialog open={Boolean(closeTarget)} title="Close this job?" description={`${closeTarget?.title || "This job"} will be closed on LinkedIn and candidates will no longer be able to apply.`} confirmLabel="Close job" busyLabel="Closing job…" busy={Boolean(closingId)} onCancel={() => setCloseTarget(null)} onConfirm={() => { if (closeTarget) void closeJob(closeTarget.id); }} />
+      <ConfirmationDialog open={Boolean(closeTarget)} title="Close this job?" description={`${closeTarget?.title || "This job"} will be closed on LinkedIn and candidates will no longer be able to apply.`} confirmLabel="Close job" busyLabel="Closing job..." busy={Boolean(closingId)} onCancel={() => setCloseTarget(null)} onConfirm={() => { if (closeTarget) void closeJob(closeTarget.id); }} />
     </div>
   );
 }
 
 function Summary({ label, value, detail, loading }: { label: string; value: number; detail: string; loading: boolean }) { return <article className={styles.summaryCard}><span>{label}</span>{loading ? <i /> : <strong>{value}</strong>}<small>{detail}</small></article>; }
 function formatLabel(value: string | null) { return value ? value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : ""; }
-function formatDate(value: string | null) { if (!value) return "—"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); }
+function formatDate(value: string | null) { if (!value) return "Not provided"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Not provided" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }); }
 function statusTone(value: string | null) { if (value === "PUBLISHED") return "success"; if (value === "PUBLISH_FAILED") return "danger"; if (value === "PUBLISHING" || value === "READY_TO_PUBLISH") return "progress"; return "neutral"; }

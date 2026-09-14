@@ -76,9 +76,9 @@ export function RichTextEditor({ value, onChange, placeholder, label }: { value:
       <ToolbarButton label="Underline" active={activeFormats.underline} onClick={() => run("underline")}><u>U</u></ToolbarButton>
       <span className={styles.toolbarDivider} />
       <ToolbarButton label="Heading" active={activeFormats.heading} onClick={() => run("formatBlock", "h3")}>H</ToolbarButton>
-      <ToolbarButton label="Bulleted list" active={activeFormats.unorderedList} onClick={() => run("insertUnorderedList")}>• List</ToolbarButton>
+      <ToolbarButton label="Bulleted list" active={activeFormats.unorderedList} onClick={() => run("insertUnorderedList")}>List</ToolbarButton>
       <ToolbarButton label="Numbered list" active={activeFormats.orderedList} onClick={() => run("insertOrderedList")}>1. List</ToolbarButton>
-      <ToolbarButton label="Quote" active={activeFormats.quote} onClick={() => run("formatBlock", "blockquote")}>“ ”</ToolbarButton>
+      <ToolbarButton label="Quote" active={activeFormats.quote} onClick={() => run("formatBlock", "blockquote")}>Quote</ToolbarButton>
     </div>
     <div
       ref={editor}

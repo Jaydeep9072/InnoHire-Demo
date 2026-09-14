@@ -119,9 +119,9 @@ export function JobForm() {
     <div className={styles.page}>
       <section className={styles.pageHeader}><div><p className={styles.eyebrow}>Job board</p><h1>Create a new job</h1><p>Build the role, review every detail, then publish it to a connected job board.</p></div>{job.localJobId && <div className={styles.draftStatus}><span className={styles.savedDot} /> Draft #{job.localJobId}</div>}</section>
 
-      <ol className={styles.stepper} aria-label="Job creation progress">{steps.map((step, index) => <li key={step}><button type="button" className={index === activeStep ? styles.stepActive : stepChecks[index] ? styles.stepComplete : styles.step} onClick={() => setActiveStep(index)}><span>{stepChecks[index] ? "✓" : index + 1}</span><strong>{step}</strong></button></li>)}</ol>
+      <ol className={styles.stepper} aria-label="Job creation progress">{steps.map((step, index) => <li key={step}><button type="button" className={index === activeStep ? styles.stepActive : stepChecks[index] ? styles.stepComplete : styles.step} onClick={() => setActiveStep(index)}><span>{index + 1}</span><strong>{step}</strong></button></li>)}</ol>
 
-      {message && <div role="status" className={message.type === "success" ? styles.messageSuccess : styles.messageError}><span>{message.type === "success" ? "✓" : "!"}</span>{message.text}</div>}
+      {message && <div role="status" className={message.type === "success" ? styles.messageSuccess : styles.messageError}><span>{message.type === "success" ? "OK" : "!"}</span>{message.text}</div>}
 
       <div className={styles.workspace}>
         <section className={styles.formPanel}>
@@ -140,7 +140,7 @@ export function JobForm() {
             <div className={styles.sectionDivider} />
             <div className={styles.editorHeading}><div><h2>Compensation</h2><p>Add the salary range shown to candidates.</p></div></div>
             <div className={styles.formGrid}>
-              <Field label="Currency"><select value={job.currency} onChange={(event) => update("currency", event.target.value)}><option value="">Select currency</option>{currencies.map(([code, name]) => <option value={code} key={code}>{code} — {name}</option>)}</select></Field>
+              <Field label="Currency"><select value={job.currency} onChange={(event) => update("currency", event.target.value)}><option value="">Select currency</option>{currencies.map(([code, name]) => <option value={code} key={code}>{code} - {name}</option>)}</select></Field>
               <Field label="Pay frequency"><select value={job.payFrequency} onChange={(event) => update("payFrequency", event.target.value as JobState["payFrequency"])}><option value="">Select frequency</option><option value="YEARLY">Yearly</option><option value="MONTHLY">Monthly</option><option value="HOURLY">Hourly</option></select></Field>
               <Field label="Minimum salary"><input inputMode="numeric" value={job.minSalary} onChange={(event) => update("minSalary", formatMoneyInput(event.target.value))} placeholder="e.g. 100,000" /></Field>
               <Field label="Maximum salary"><input inputMode="numeric" value={job.maxSalary} onChange={(event) => update("maxSalary", formatMoneyInput(event.target.value))} placeholder="e.g. 140,000" /></Field>
@@ -150,16 +150,16 @@ export function JobForm() {
           {activeStep === 1 && <>
             <SectionHeading number="02" title="Job description" subtitle="Explain the opportunity, impact, and day-to-day responsibilities." />
             <div className={styles.formGrid}>
-              <Field label="About the role *" full><RichTextEditor label="About the role" value={job.jobDescription} onChange={(value) => update("jobDescription", value)} placeholder="Describe the role, its impact, and what success looks like…" /></Field>
-              <Field label="Responsibilities *" full><RichTextEditor label="Responsibilities" value={job.responsibilities} onChange={(value) => update("responsibilities", value)} placeholder="Add the responsibilities for this role…" /></Field>
+              <Field label="About the role *" full><RichTextEditor label="About the role" value={job.jobDescription} onChange={(value) => update("jobDescription", value)} placeholder="Describe the role, its impact, and what success looks like..." /></Field>
+              <Field label="Responsibilities *" full><RichTextEditor label="Responsibilities" value={job.responsibilities} onChange={(value) => update("responsibilities", value)} placeholder="Add the responsibilities for this role..." /></Field>
             </div>
           </>}
 
           {activeStep === 2 && <>
             <SectionHeading number="03" title="Candidate requirements" subtitle="Define the evidence used to match applicants to this role." />
-            <div className={styles.notice}><span>✦</span><div><strong>Explainable matching</strong><p>Skills and experience below are compared only with the candidate’s professional profile and résumé content.</p></div></div>
+            <div className={styles.notice}><span>i</span><div><strong>Explainable matching</strong><p>Skills and experience below are compared only with the candidate&apos;s professional profile and resume content.</p></div></div>
             <div className={styles.formGrid}>
-              <Field label="Required skills *" full><textarea value={job.requiredSkills} onChange={(event) => update("requiredSkills", event.target.value)} rows={7} placeholder="Enter skills separated by commas or one per line…" /></Field>
+              <Field label="Required skills *" full><textarea value={job.requiredSkills} onChange={(event) => update("requiredSkills", event.target.value)} rows={7} placeholder="Enter skills separated by commas or one per line..." /></Field>
               <Field label="Minimum experience (years)"><input type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={job.minimumExperience} onChange={(event) => update("minimumExperience", decimalOnly(event.target.value))} /></Field>
             </div>
           </>}
@@ -167,9 +167,9 @@ export function JobForm() {
           {activeStep === 3 && <>
             <SectionHeading number="04" title="Review and publish" subtitle="Review the job details before saving it and publishing to connected boards." />
             <div className={styles.reviewGrid}>
-              <article className={styles.reviewCard}><span>Role</span><strong>{job.title || "Job title not added"}</strong><p>{[job.department, job.location, job.workplaceType.replace("_", " ")].filter(Boolean).join(" · ") || "Role details are incomplete"}</p></article>
+              <article className={styles.reviewCard}><span>Role</span><strong>{job.title || "Job title not added"}</strong><p>{[job.department, job.location, job.workplaceType.replace("_", " ")].filter(Boolean).join(", ") || "Role details are incomplete"}</p></article>
               <article className={styles.reviewCard}><span>Requirements</span><strong>{job.minimumExperience} years minimum</strong><p>{job.requiredSkills ? `${job.requiredSkills.split(/[,\n]/).filter(Boolean).length} required skills` : "Required skills not added"}</p></article>
-              <article className={styles.reviewCard}><span>Compensation</span><strong>{job.minSalary || job.maxSalary ? `${job.minSalary || "—"} – ${job.maxSalary || "—"} ${job.currency}` : "Not added"}</strong><p>{job.payFrequency ? job.payFrequency.toLowerCase() : "Pay frequency not added"}</p></article>
+              <article className={styles.reviewCard}><span>Compensation</span><strong>{job.minSalary || job.maxSalary ? `${job.minSalary || "Not set"} to ${job.maxSalary || "Not set"} ${job.currency}` : "Not added"}</strong><p>{job.payFrequency ? job.payFrequency.toLowerCase() : "Pay frequency not added"}</p></article>
             </div>
             {jobBoardSelectionEnabled && <><div className={styles.sectionDivider} />
             <div className={styles.channelHeading}><div><h2>Job board options</h2><p>Selected connected boards are published when you submit the job. Unconnected boards are saved for reference.</p></div></div>
@@ -179,11 +179,11 @@ export function JobForm() {
             </>}
           </>}
 
-          <div className={styles.formFooter}><button className={styles.secondaryButton} type="button" onClick={() => save("draft")} disabled={busy !== null}>{busy === "draft" ? "Saving…" : "Save draft"}</button><div className={styles.stepActions}>{activeStep > 0 && <button className={styles.secondaryButton} type="button" onClick={() => setActiveStep(activeStep - 1)}>Back</button>}{activeStep < steps.length - 1 ? <button className={styles.primaryButton} type="button" onClick={() => setActiveStep(activeStep + 1)}>Continue <span>→</span></button> : <button type="button" onClick={() => save("submit")} disabled={busy !== null} className={styles.publishButton}>{busy === "submit" ? "Submitting…" : "Submit job"}</button>}</div></div>
+          <div className={styles.formFooter}><button className={styles.secondaryButton} type="button" onClick={() => save("draft")} disabled={busy !== null}>{busy === "draft" ? "Saving..." : "Save draft"}</button><div className={styles.stepActions}>{activeStep > 0 && <button className={styles.secondaryButton} type="button" onClick={() => setActiveStep(activeStep - 1)}>Back</button>}{activeStep < steps.length - 1 ? <button className={styles.primaryButton} type="button" onClick={() => setActiveStep(activeStep + 1)}>Continue</button> : <button type="button" onClick={() => save("submit")} disabled={busy !== null} className={styles.publishButton}>{busy === "submit" ? "Submitting..." : "Submit job"}</button>}</div></div>
         </section>
 
         <aside className={styles.sideColumn}>
-          <section className={styles.uploadPanel}><div className={styles.sideHeading}><span className={styles.uploadIcon}>✦</span><div><h2>Upload a job description</h2><p>The AI agent will extract the details and fill the form.</p></div></div><input ref={fileInput} className={styles.hiddenInput} type="file" accept=".pdf,.docx,.txt" onChange={(event) => handleFile(event.target.files?.[0])} /><button type="button" className={styles.dropzone} onClick={() => fileInput.current?.click()} onDrop={(event) => { event.preventDefault(); handleFile(event.dataTransfer.files?.[0]); }} onDragOver={(event) => event.preventDefault()}><span className={styles.fileIcon}>AI</span><strong>{busy === "extract" ? "AI agent is analyzing…" : fileName || "Drop a file here or browse"}</strong><small>{fileName ? "The form will update automatically" : "PDF, DOCX or TXT · maximum 10 MB"}</small></button>{fileName && <button type="button" className={styles.extractButton} onClick={() => extractDocument()} disabled={busy !== null}>{busy === "extract" ? "Analyzing…" : "Run AI extraction again"}</button>}</section>
+          <section className={styles.uploadPanel}><div className={styles.sideHeading}><span className={styles.uploadIcon}>AI</span><div><h2>Upload a job description</h2><p>The AI agent will extract the details and fill the form.</p></div></div><input ref={fileInput} className={styles.hiddenInput} type="file" accept=".pdf,.docx,.txt" onChange={(event) => handleFile(event.target.files?.[0])} /><button type="button" className={styles.dropzone} onClick={() => fileInput.current?.click()} onDrop={(event) => { event.preventDefault(); handleFile(event.dataTransfer.files?.[0]); }} onDragOver={(event) => event.preventDefault()}><span className={styles.fileIcon}>AI</span><strong>{busy === "extract" ? "AI agent is analyzing..." : fileName || "Drop a file here or browse"}</strong><small>{fileName ? "The form will update automatically" : "PDF, DOCX or TXT, maximum 10 MB"}</small></button>{fileName && <button type="button" className={styles.extractButton} onClick={() => extractDocument()} disabled={busy !== null}>{busy === "extract" ? "Analyzing..." : "Run AI extraction again"}</button>}</section>
         </aside>
       </div>
     </div>

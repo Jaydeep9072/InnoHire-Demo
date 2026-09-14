@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["oracledb"],
+  serverExternalPackages: ["oracledb", "oci-common", "oci-objectstorage", "oci-aispeech"],
 };
 
 export default nextConfig;

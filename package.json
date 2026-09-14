@@ -20,6 +20,9 @@
     "mammoth": "^1.12.1",
     "next": "16.2.6",
     "nodemailer": "^9.0.5",
+    "oci-aispeech": "^2.140.1",
+    "oci-common": "^2.140.1",
+    "oci-objectstorage": "^2.140.1",
     "oracledb": "^7.0.1",
     "pdf-parse": "1.1.1",
     "react": "19.2.6",
@@ -30,7 +33,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.2.6",
-    "@tailwindcss/postcss": "4.2.1",
+    "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "22.19.19",
     "@types/nodemailer": "^8.0.1",
     "@types/react": "19.2.14",
@@ -40,7 +43,7 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
-    "tailwindcss": "4.2.1",
+    "tailwindcss": "^4.3.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.59.3"
   },

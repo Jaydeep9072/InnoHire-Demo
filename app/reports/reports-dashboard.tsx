@@ -41,7 +41,7 @@ export function ReportsDashboard() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.pageHeader}><div><p className={styles.eyebrow}>Talent analytics</p><h1>Recruitment reports</h1><p>Measure job activity, applicant quality, and pipeline outcomes from live hiring data.</p></div><button type="button" className={styles.exportButton} onClick={exportCsv} disabled={!data?.configured}>Export CSV <span>↓</span></button></header>
+      <header className={styles.pageHeader}><div><p className={styles.eyebrow}>Talent analytics</p><h1>Recruitment reports</h1><p>Measure job activity, applicant quality, and pipeline outcomes from live hiring data.</p></div><button type="button" className={styles.exportButton} onClick={exportCsv} disabled={!data?.configured}>Export CSV</button></header>
 
       <section className={styles.filterBar}>
         <label><span>Date from</span><input type="date" value={filters.from} onChange={(event) => setFilter("from", event.target.value)} /></label>
@@ -68,7 +68,7 @@ export function ReportsDashboard() {
             {!data?.applicationsTrend?.length ? <EmptyChart text="No application activity in this range." /> : <div className={styles.barChart}>{data.applicationsTrend.map((item) => <div className={styles.barGroup} key={item.label}><span className={styles.barValue}>{item.value}</span><div className={styles.barTrack}><span style={{ height: `${Math.max(8, item.value / maxTrend * 100)}%` }} /></div><small>{new Date(`${item.label}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></div>)}</div>}
           </section>
           <section className={styles.statusPanel}><PanelHeading title="Candidate status" subtitle="Current applicant pipeline distribution" />
-            {!data?.candidateStatuses?.length ? <EmptyChart text="No candidate statuses to report." /> : <div className={styles.donutLayout}><div className={styles.donut} style={{ background: `conic-gradient(${statusGradient})` }}><div><strong>{statusTotal}</strong><span>Applicants</span></div></div><ul>{data.candidateStatuses.map((item, index) => <li key={item.label}><span style={{ background: ["#0f766e", "#159b8e", "#76cfc1", "#c8ebe4", "#d97706"][index % 5] }} /><div><strong>{item.label}</strong><small>{item.value} · {Math.round(item.value / statusTotal * 100)}%</small></div></li>)}</ul></div>}
+            {!data?.candidateStatuses?.length ? <EmptyChart text="No candidate statuses to report." /> : <div className={styles.donutLayout}><div className={styles.donut} style={{ background: `conic-gradient(${statusGradient})` }}><div><strong>{statusTotal}</strong><span>Applicants</span></div></div><ul>{data.candidateStatuses.map((item, index) => <li key={item.label}><span style={{ background: ["#0f766e", "#159b8e", "#76cfc1", "#c8ebe4", "#d97706"][index % 5] }} /><div><strong>{item.label}</strong><small>{item.value}, {Math.round(item.value / statusTotal * 100)}%</small></div></li>)}</ul></div>}
           </section>
           <section className={styles.skillsPanel}><PanelHeading title="Top required skills" subtitle="Most frequent requirements across filtered jobs" />
             {!data?.topSkills?.length ? <EmptyChart text="No required skills to report." /> : <div className={styles.skillBars}>{data.topSkills.map((item) => <div key={item.label}><span>{item.label}</span><div><i style={{ width: `${item.value / Math.max(...data.topSkills.map((skill) => skill.value)) * 100}%` }} /></div><strong>{item.value}</strong></div>)}</div>}
@@ -76,7 +76,7 @@ export function ReportsDashboard() {
         </div>
 
         <section className={styles.tablePanel}><PanelHeading title="Job performance" subtitle="Applicant volume and match quality by role" />
-          <div className={styles.tableWrap}><table><thead><tr><th>Job</th><th>Department</th><th>Status</th><th>Applicants</th><th>High match</th><th>Avg. score</th></tr></thead><tbody>{(data?.jobs || []).map((job) => <tr key={job.job_posting_id}><td><strong>{job.title || `Job ${job.job_posting_id}`}</strong><small>#{job.job_posting_id}</small></td><td>{job.department || "—"}</td><td><span className={styles.statusPill}>{job.posting_status || "UNSET"}</span></td><td>{job.applicant_count || 0}</td><td>{job.high_match_count || 0}</td><td>{job.average_score == null ? "—" : `${job.average_score}%`}</td></tr>)}</tbody></table>{!data?.jobs?.length && <div className={styles.tableEmpty}>No jobs match the selected filters.</div>}</div>
+          <div className={styles.tableWrap}><table><thead><tr><th>Job</th><th>Department</th><th>Status</th><th>Applicants</th><th>High match</th><th>Avg. score</th></tr></thead><tbody>{(data?.jobs || []).map((job) => <tr key={job.job_posting_id}><td><strong>{job.title || `Job ${job.job_posting_id}`}</strong><small>#{job.job_posting_id}</small></td><td>{job.department || "Not provided"}</td><td><span className={styles.statusPill}>{job.posting_status || "UNSET"}</span></td><td>{job.applicant_count || 0}</td><td>{job.high_match_count || 0}</td><td>{job.average_score == null ? "N/A" : `${job.average_score}%`}</td></tr>)}</tbody></table>{!data?.jobs?.length && <div className={styles.tableEmpty}>No jobs match the selected filters.</div>}</div>
         </section>
       </>}
     </div>
@@ -85,4 +85,4 @@ export function ReportsDashboard() {
 
 function MetricCard({ label, value, detail, tone, loading }: { label: string; value: string | number | null | undefined; detail: string; tone: string; loading: boolean }) { return <article className={`${styles.metricCard} ${styles[tone]}`}><span>{label}</span>{loading ? <i className={styles.metricLoading} /> : <strong>{value ?? 0}</strong>}<small>{detail}</small></article>; }
 function PanelHeading({ title, subtitle }: { title: string; subtitle: string }) { return <header className={styles.panelHeading}><div><h2>{title}</h2><p>{subtitle}</p></div><span>Live data</span></header>; }
-function EmptyChart({ text }: { text: string }) { return <div className={styles.emptyChart}><span>↗</span><p>{text}</p></div>; }
+function EmptyChart({ text }: { text: string }) { return <div className={styles.emptyChart}><span>N</span><p>{text}</p></div>; }

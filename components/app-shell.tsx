@@ -43,8 +43,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <details ref={jobMenu} className={styles.dropdown}>
             <summary className={pathname.startsWith("/jobs") ? styles.navLinkActive : styles.navLink}>Job Board</summary>
             <div className={styles.dropdownMenu}>
-              <Link href="/jobs" onClick={closeNavigation} className={pathname === "/jobs" ? styles.dropdownLinkActive : styles.dropdownLink}><span>▤</span><div><strong>All jobs</strong><small>View and manage roles</small></div></Link>
-              <Link href="/jobs/new" onClick={closeNavigation} className={pathname.startsWith("/jobs/new") ? styles.dropdownLinkActive : styles.dropdownLink}><span>＋</span><div><strong>Post a job</strong><small>Create and publish a role</small></div></Link>
+              <Link href="/jobs" onClick={closeNavigation} className={pathname === "/jobs" ? styles.dropdownLinkActive : styles.dropdownLink}><span>J</span><div><strong>All jobs</strong><small>View and manage roles</small></div></Link>
+              <Link href="/jobs/new" onClick={closeNavigation} className={pathname.startsWith("/jobs/new") ? styles.dropdownLinkActive : styles.dropdownLink}><span>P</span><div><strong>Post a job</strong><small>Create and publish a role</small></div></Link>
             </div>
           </details>
           {navigation.map((item) => {
@@ -53,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className={styles.headerActions}>
-          <button className={styles.iconButton} type="button" aria-label="Notifications"><span className={styles.notificationDot} /><span aria-hidden="true">●</span></button>
+          <button className={styles.iconButton} type="button" aria-label="Notifications"><span className={styles.notificationDot} /><span aria-hidden="true">N</span></button>
           <div className={styles.profile} aria-label="HR profile">HR</div>
         </div>
       </header>

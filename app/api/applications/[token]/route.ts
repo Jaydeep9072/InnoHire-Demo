@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const application = applicationSchema.parse(await request.json());
     const resume = Buffer.from(application.resumeBase64, "base64");
     if (!resume.length || resume.length > maximumResumeBytes || resume.subarray(0, 5).toString("ascii") !== "%PDF-") {
-      return NextResponse.json({ error: "Upload a valid PDF résumé no larger than 3 MB." }, { status: 400 });
+      return NextResponse.json({ error: "Upload a valid PDF resume no larger than 3 MB." }, { status: 400 });
     }
     const appliedAt = oracleTimestamp();
     const externalApplicationId = `APP-WEB-${application.externalApplicationId}`;
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     assertOrdsSuccess(result);
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    if (error instanceof SyntaxError || error instanceof ZodError) return NextResponse.json({ error: "Complete all required fields and attach a valid PDF résumé." }, { status: 400 });
+    if (error instanceof SyntaxError || error instanceof ZodError) return NextResponse.json({ error: "Complete all required fields and attach a valid PDF resume." }, { status: 400 });
     if (error instanceof OrdsError) {
       console.error("ORDS candidate application failed", { message: error.message, status: error.status, details: error.details });
       return NextResponse.json({ error: "Your application could not be submitted right now. Please try again shortly." }, { status: error.status });

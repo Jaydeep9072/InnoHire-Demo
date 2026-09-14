@@ -11,29 +11,30 @@ type Props = {
   onClose: () => void;
   onRetry: () => void;
   onAnswer: (questionId: string, value: string) => void;
+  onRecordingSelected: (file: File) => void;
   onSave: () => void;
   onAnalyze: () => void;
 };
 
-export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer, onSave, onAnalyze }: Props) {
+export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer, onRecordingSelected, onSave, onAnalyze }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const recordingInput = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("All questions");
-  const [recordingName, setRecordingName] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const busy = Boolean(session.busy);
+  const recordingActive = Boolean(session.recording && !["COMPLETED", "FAILED"].includes(session.recording.stage));
+  const recordingFailed = session.recording?.stage === "FAILED";
 
   function chooseRecording(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     setRecordingError(null);
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".m4a")) {
-      setRecordingName(null);
       setRecordingError("Only M4A call recordings can be selected.");
       event.currentTarget.value = "";
       return;
     }
-    setRecordingName(file.name);
+    onRecordingSelected(file);
     event.currentTarget.value = "";
   }
   useEffect(() => {
@@ -54,8 +55,8 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
 
   return <dialog ref={dialog} className={styles.dialog} aria-labelledby="screening-title" onCancel={(event) => { if (busy) event.preventDefault(); else onClose(); }}>
     <header className={styles.header}>
-      <div><p className={styles.eyebrow}>Candidate screening</p><h2 id="screening-title">Screening question bank</h2><p>{candidate.full_name || "Candidate"} · {candidate.job_title || `Job ${candidate.job_posting_id}`}</p></div>
-      <button type="button" className={styles.close} aria-label="Close screening" onClick={onClose} disabled={busy}>×</button>
+      <div><p className={styles.eyebrow}>Candidate screening</p><h2 id="screening-title">Screening question bank</h2><p>{candidate.full_name || "Candidate"} - {candidate.job_title || `Job ${candidate.job_posting_id}`}</p></div>
+      <button type="button" className={styles.close} aria-label="Close screening" onClick={onClose} disabled={busy}>X</button>
     </header>
 
     <div className={styles.content} aria-busy={session.loading || busy}>
@@ -70,15 +71,33 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
           <section className={styles.recordingUpload} aria-labelledby="call-recording-title">
             <div className={styles.recordingInfo}>
               <strong id="call-recording-title">Call recording</strong>
-              <span>M4A files only. The recording is not uploaded or saved.</span>
+              <span>M4A files only, up to 100 MB. The private recording is transcribed asynchronously by OCI Speech.</span>
               {recordingError && <span className={styles.recordingError} role="alert">{recordingError}</span>}
             </div>
             <div className={styles.recordingControls}>
-              <button type="button" className={styles.recordingButton} onClick={() => recordingInput.current?.click()} disabled={busy}>Upload call recording</button>
-              <input ref={recordingInput} className={styles.fileInput} type="file" accept=".m4a" onChange={chooseRecording} disabled={busy} tabIndex={-1} />
-              {recordingName && <span className={styles.recordingName} role="status" title={recordingName}>{recordingName}</span>}
+              <button type="button" className={styles.recordingButton} onClick={() => recordingInput.current?.click()} disabled={busy || recordingActive || !session.screeningId}>{session.busy === "uploading" ? "Uploading..." : recordingFailed ? "Reupload call recording" : "Upload call recording"}</button>
+              <input ref={recordingInput} className={styles.fileInput} type="file" accept=".m4a" onChange={chooseRecording} disabled={busy || recordingActive || !session.screeningId} tabIndex={-1} />
+              {session.callRecordingName && <span className={styles.recordingName} role="status" title={session.callRecordingName}>{session.callRecordingName}</span>}
             </div>
           </section>
+
+          {session.recording && <section className={styles.recordingStatus} aria-labelledby="recording-status-title">
+            <div className={styles.recordingStatusHeader}>
+              <div><p className={styles.eyebrow}>OCI Speech job status</p><h3 id="recording-status-title">{(session.recording.stage === "FAILED" ? "FAILED" : session.recording.speechLifecycleState || session.recording.stage).replaceAll("_", " ").toLowerCase()}</h3>{session.recording.transcriptionJobId && <small>Job ID: {session.recording.transcriptionJobId}</small>}</div>
+              {session.recording.percentComplete != null && <strong>{Math.round(session.recording.percentComplete)}%</strong>}
+            </div>
+            {session.recording.percentComplete != null && <div className={styles.recordingProgress} aria-label={`Transcription ${Math.round(session.recording.percentComplete)} percent complete`}><span style={{ width: `${session.recording.percentComplete}%` }} /></div>}
+            {session.recording.error && <p className={styles.recordingFailure} role="alert">{session.recording.error.message}{session.recording.error.retryable ? " The worker will retry automatically." : " Upload the M4A recording again to retry."}</p>}
+            {session.recording.transcript && <details className={styles.transcript}><summary>Review transcript ({session.recording.transcript.segments.length} segments)</summary><div>{session.recording.transcript.segments.map((segment) => {
+              const role = segment.role === "INTERVIEWER" ? "Speaker 1 (Interviewer)" : segment.role === "APPLICANT" ? "Speaker 2 (Applicant)" : segment.speakerId;
+              return <p key={segment.id}><span>{role} - {Math.floor(segment.startMs / 60000)}:{String(Math.floor(segment.startMs / 1000) % 60).padStart(2, "0")}</span>{segment.text}</p>;
+            })}</div></details>}
+            {session.recording.assessment && <div className={styles.recordingAssessment}>
+              <div className={styles.recordingAssessmentSummary}><strong>{session.recording.assessment.overallMatchPercentage == null ? "Needs review" : `${session.recording.assessment.overallMatchPercentage}% screening match`}</strong><span>{session.recording.assessment.coveragePercentage}% rubric coverage</span></div>
+              <p>{session.recording.assessment.summary}</p>
+              <div className={styles.recordingParameters}>{session.recording.assessment.parameterAssessments.map((item) => <div key={item.parameter}><span>{item.parameter}</span><strong>{item.score == null ? "Insufficient evidence" : `${item.score}%`}</strong><p>{item.rationale}</p></div>)}</div>
+            </div>}
+          </section>}
 
           {session.message && <div className={session.message.type === "success" ? styles.success : styles.error} role="status">{session.message.text}</div>}
 
@@ -97,7 +116,7 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
             </div>
           </section>}
 
-          <p className={styles.help}>Capture specific examples, the candidate&apos;s actions, and the outcome. All {session.questions.length} answers are required for analysis.</p>
+          <p className={styles.help}>Capture specific examples, the candidate&apos;s actions, and the outcome. Unanswered questions are treated as insufficient evidence.</p>
           <div className={styles.filters} role="group" aria-label="Filter screening questions">
             {["All questions", ...screeningCategories].map((category) => <button type="button" key={category} aria-pressed={filter === category} onClick={() => setFilter(category)}>{category} <span>{category === "All questions" ? session.questions.length : session.questions.filter((question) => question.category === category).length}</span></button>)}
           </div>
@@ -106,11 +125,11 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
             {session.questions.map((question, index) => {
               const answerAnalysis = answerAnalyses.get(question.id);
               return (filter === "All questions" || filter === question.category) && <section className={styles.question} key={question.id}>
-                <div className={styles.questionMeta}><span>Question {index + 1} · {question.category}</span>{session.answers[question.id]?.trim() && <span>Answered</span>}</div>
+                <div className={styles.questionMeta}><span>Question {index + 1} - {question.category}</span>{session.answers[question.id]?.trim() && <span>Answered</span>}</div>
                 <h3 id={`${question.id}-label`}>{question.question}</h3>
                 <p className={styles.context}>{question.context}</p>
                 <label htmlFor={`${question.id}-answer`}>Answer</label>
-                <textarea id={`${question.id}-answer`} aria-describedby={`${question.id}-label`} rows={5} maxLength={10000} value={session.answers[question.id] || ""} onChange={(event) => onAnswer(question.id, event.target.value)} placeholder="Write the candidate’s answer here…" disabled={busy} />
+                <textarea id={`${question.id}-answer`} aria-describedby={`${question.id}-label`} rows={5} maxLength={10000} value={session.answers[question.id] || ""} onChange={(event) => onAnswer(question.id, event.target.value)} placeholder="Write the candidate's answer here..." disabled={busy} />
                 {answerAnalysis && <div className={styles.answerAnalysis}><div><strong>Answer analysis</strong><span>{answerAnalysis.score}%</span></div><p>{answerAnalysis.analysis}</p><small>Evidence: {answerAnalysis.evidence}</small></div>}
               </section>;
             })}
@@ -119,10 +138,10 @@ export function ScreeningDialog({ candidate, session, onClose, onRetry, onAnswer
     </div>
 
     {!session.loading && !session.error && <footer className={styles.footer}>
-      <p>{answered < session.questions.length ? `${session.questions.length - answered} answer${session.questions.length - answered === 1 ? "" : "s"} remaining before AI analysis.` : "All answers are ready for AI analysis."}</p>
+      <p>{answered === 0 ? "Add at least one answer to start analysis." : `${answered} of ${session.questions.length} answers will be analyzed. Unanswered questions will be marked as insufficient evidence.`}</p>
       <div>
-        <button type="button" className={styles.secondary} onClick={onSave} disabled={busy || answered === 0}>{session.busy === "saving" ? "Saving…" : "Save draft"}</button>
-        <button type="button" className={styles.primary} onClick={onAnalyze} disabled={busy || answered !== session.questions.length}>{session.busy === "analyzing" ? "Analyzing answers…" : session.analysis ? "Analyze again" : "Save & analyze answers"}</button>
+        <button type="button" className={styles.secondary} onClick={onSave} disabled={busy || answered === 0}>{session.busy === "saving" ? "Saving..." : "Save draft"}</button>
+        <button type="button" className={styles.primary} onClick={onAnalyze} disabled={busy || answered === 0}>{session.busy === "analyzing" ? "Analyzing answers..." : session.analysis ? "Analyze again" : "Save & analyze answers"}</button>
       </div>
     </footer>}
   </dialog>;
